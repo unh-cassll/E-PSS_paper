@@ -68,42 +68,35 @@ Polarimetry, gravity-capillary waves, wave slope sensing, polarimetric slope sen
 % creates the second title. It will be ignored for other modes.
 \IEEEpeerreviewmaketitle
 
-\vspace{-15pt}
-
-\section{Introduction}
-\label{sec:intro}
-\IEEEPARstart{F}{irst} sentence.
-
-\newpage
-
-\section{Background}
-
-\section{Methodology}
-
-An update to \cite{Zappa2008}
-
 \textbf{Outline}
 
 \begin{itemize}
-    \item Problem statement
+    \item PSS is useful, but there are two main issues to address:
     \begin{enumerate}
+        \item Unknown impact of ambient illumination conditions on surface wave measurements.
+        \begin{enumerate}
         \item impact of polarized incident light
         \item impact of upwelling light
-        \item this makes the DoLP-$\theta$ relationship different for each measurement (show examples from river acquisitions with wide format lens)
+        \item this makes the DoLP-$\theta$ relationship different for each measurement
     \end{enumerate}
-    \item Solutions
+        \item Previous applications of PSS have been scale-limited to target short waves at the expense of long waves
+        \begin{enumerate}
+            \item Integrating a robust long wave sensing component into the PSS framework would significantly expand the technique's usefulness
+        \end{enumerate}
+        \item \textbf{We need to address these concerns without adding any more cameras: all we get is one imager that stays looking at the sea surface.}
+    \end{enumerate}
+    \item Let's address the first challenge first. What are our options?
     \begin{enumerate}
         \item laboratory-based gain to DoLP
         \item measurement of upwelling radiance and downwelling polarization state
         \item direct measurement of DoLP-$\theta$ relationship with wide format lens
-        \item absent all of that-- an \lq\lq empirical" gain
+        \item absent all of that-- an \lq\lq empirical" gain; \textbf{this is what we're going with here}
     \end{enumerate}
-    \item Our Approach
+    \item The second challenge:
     \begin{enumerate}
-        \item empirical gain
-        \item transfer function: slope to elevation time series
-        \item integrated slope fields
-        \item inferring frequency-directional spectrum from virtual wave gauge array
+        \item transfer function: inferring the water surface elevation time series from the two-component surface slope time series
+        \item integrate the slope fields to obtain small-scale roughness variation
+        \item inferring frequency-directional spectrum from virtual wave gauge array (MEM/EMEP and E-WDM)
     \end{enumerate}
     \item Our Results
     \begin{enumerate}
@@ -113,18 +106,27 @@ An update to \cite{Zappa2008}
         \item wave direction and spreading comparison (ADCP)
         \item slope statistics with wind speed (mss, PDFs, skewness/kurtosis)
         \item wave spectra with wind speed
-        \item bonus (?): wave orbital velocity measurements
+    \end{enumerate}
+    \item Going forward: adding more imagers for \emph{in situ} determination of ambient illumination conditions
+    \begin{enumerate}
+        \item Wide format surface imager, for direct measurement of DoLP-$\theta$ relationship. Need to consider effects of light rays entering FPA obliquely \cite{pistellato_geometric_2024}.
     \end{enumerate}
 \end{itemize}
 
-\section{Results}
+\section{Background}
+\label{sec:intro}
+\IEEEPARstart{F}{irst} sentence.\\
 
-\newpage
+Some relevant papers on the topic: \cite{Zappa2008}, \cite{laxague_effects_2025}.
+
+\section{Methodology}
+\label{sec:methodology}
+
+\section{Results}
+\label{sec:results}
 
 \section{Discussion}
 \label{sec:discussion}
-
-Test reference: \cite{}
 
 % use section* for acknowledgment
 \section*{Acknowledgment}
@@ -137,7 +139,7 @@ Collection of field data from ASIT was supported by NSF (Award Number 1756839), 
 
 The full suite of codes which contain our implementation of Polarimetric Slope Sensing (PSS) for DoFP polarimeters are available at \url{https://github.com/unh-cassll/polarimetric-slope-sensing}.
 
-% Finally-- all of the codes used to produce the graphics shown in this document are available at \url{https://github.com/unh-cassll/polarimetry-subpixel-variability}.
+Finally-- all of the codes used to produce the graphics shown in this document are available at \url{https://github.com/unh-cassll/E-PSS}.
 
 % references section
 
