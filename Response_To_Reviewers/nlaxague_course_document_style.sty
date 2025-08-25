@@ -1,0 +1,138 @@
+\NeedsTeXFormat{LaTeX2e}
+%\ProvidesClass{notes}[1995/04/01 The Simple News newsletter class]
+%%\newcommand{\headlinecolor}{\normalcolor}
+%\DeclareOption{twocolumn}{\OptionNotUsed}
+%%\DeclareOption{green}{\renewcommand{\headlinecolor}{\color{green}}}
+%\DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}
+%\ProcessOptions\relax
+%\LoadClass[onecolumn]{article}
+\renewcommand{\normalsize}{\fontsize{14}{16}\selectfont}
+%\renewcommand{\normalsize}{\fontsize{12}{14}\selectfont}
+\renewcommand{\rmdefault}{cmss}
+\newcommand{\dotline}{ \noindent $\cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots \cdots$\\ \noindent}
+\RequirePackage{graphicx} %Graphics package. Will pick up eps or pdf, 
+                        %depending on what you compile with
+\RequirePackage{amsmath}  %Fancier math package. 
+\RequirePackage{amssymb}
+\RequirePackage{cancel}
+\RequirePackage{array} %Goes with tabular environment
+\RequirePackage{hhline} %Make fancier tables. 
+\RequirePackage{subfigure} % Makes it so you can have 2 side by side figures
+\RequirePackage{rotating} %Defines sidewaysfigure and sidewaystable environments
+%\RequirePackage{portland} %Defines a otherwise oriented page in a document
+\RequirePackage[usenames,dvipsnames]{color} %Add color text and pages, etc. 
+\RequirePackage{lastpage} %get last page number
+\RequirePackage{fancyhdr}
+\RequirePackage[usenames,dvipsnames]{color}
+\RequirePackage{hhline}
+\RequirePackage{multicol}
+\RequirePackage{makecell}
+%\RequirePackage{portland}
+\RequirePackage{ifthen}
+\RequirePackage{pdfpages}
+\RequirePackage{float}
+\RequirePackage[utf8]{luainputenc}
+%\RequirePackage{fontspec} 					                 % for loading fonts
+\RequirePackage{url,parskip} 	    % other packages for formatting
+\RequirePackage[usenames,dvipsnames]{xcolor}
+\RequirePackage{fullpage}
+\RequirePackage[margin=1.0in]{geometry}
+\RequirePackage{fontawesome}
+\RequirePackage{titlesec}
+\RequirePackage{array}
+\RequirePackage{enumitem}
+\RequirePackage{longtable} 	
+\RequirePackage{etoolbox}
+\RequirePackage{tikz}
+\RequirePackage[skins]{tcolorbox}
+\RequirePackage{multicol}
+\RequirePackage{hyperref}
+\RequirePackage{xcolor}
+\RequirePackage{multicol}
+\RequirePackage{makecell}
+\RequirePackage{cmbright}
+\RequirePackage[T1]{fontenc}
+
+\definecolor{Navy}{RGB}{2,33,105}
+\definecolor{Columbia}{RGB}{108,172,228}
+\definecolor{Teal}{RGB}{0,128,128}
+\definecolor{Black}{RGB}{0,0,0}
+
+\hypersetup{
+    colorlinks,
+    linkcolor={red!50!black},
+    citecolor={blue!50!black},
+    urlcolor={Columbia!80!black}
+}
+
+% Define font to use according to localFont option
+%\ifundef{\@local}
+%{
+%  %\setmainfont[BoldFont = Helvetica Neue, ItalicFont=Helvetica Neue Thin Italic ,SmallCapsFont = Helvetica Neue Light]{Helvetica Neue Thin}
+%  \setmainfont{Source Sans Pro Light}[
+%    BoldFont = Source Sans Pro Semibold, 
+%    ItalicFont= Source Sans Pro Light Italic,
+%    SmallCapsFont = Source Sans Pro]
+%}
+%{
+%  \setmainfont{SourceSansPro-Light}[
+%    Path = fonts/, 
+%    BoldFont = SourceSansPro-Semibold, 
+%    ItalicFont = SourceSansPro-LightIt, 
+%    SmallCapsFont = SourceSansPro-Regular]
+%}
+
+\cfoot{\thepage\ of \pageref{LastPage}}
+%%\lhead{CE 723} \chead{} \rhead{} \rfoot{} \lfoot{} %%Either here or in latex files
+\renewcommand{\headrulewidth}{0.0pt}%
+\renewcommand{\footrulewidth}{0.0pt}%
+
+\setlength{\paperwidth}{612pt}
+\setlength{\paperheight}{792pt}
+\setlength{\hoffset}{0pt}
+%\setlength{\hoffset}{-30pt}
+\setlength{\voffset}{-36pt}
+\setlength{\oddsidemargin}{0pt}
+\setlength{\topmargin}{0pt}
+\setlength{\headheight}{18pt}
+\setlength{\headsep}{18pt}
+\setlength{\textheight}{648pt}
+\setlength{\textwidth}{468pt}
+%%%\setlength{\textwidth}{6in}
+\setlength{\marginparsep}{8pt}
+\setlength{\marginparwidth}{46pt}
+\setlength{\footskip}{36pt}
+
+\pagestyle{fancy}
+\newlength\singlespacelength
+\newlength\doublespacelength
+\newlength\halfspacelength
+\newlength\triplespacelength
+\setlength\singlespacelength{16pt}
+\setlength\halfspacelength{22pt}
+\setlength\doublespacelength{30pt}
+\setlength\triplespacelength{43pt}
+\newcommand\startsinglespace{\setlength\baselineskip{\singlespacelength}}
+\newcommand\startdoublespace{\setlength\baselineskip{\doublespacelength}}
+\newcommand\starthalfspace{\setlength\baselineskip{\halfspacelength}}
+\newboolean{PrintFig}
+\setboolean{PrintFig}{false}
+
+%%%Define single or double space
+\AtBeginDocument{
+    \startsinglespace
+}
+
+
+\setcounter{secnumdepth}{0}  %%%Turns off section counting.
+
+\newenvironment{dlist}
+{\begin{itemize} \setlength{\itemsep}{-4pt}}
+{\end{itemize}}
+
+\definecolor{MyBlank}{rgb}{1,1,1}
+\newenvironment{equat}
+{\begin{equation*} \color{MyBlank}}
+{\end{equation*}}
+\newenvironment{gath}{\begin{equation*} \color{MyBlank}\begin{gathered}}{\end{gathered}\end{equation*}}
+
