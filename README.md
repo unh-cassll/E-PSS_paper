@@ -4,7 +4,7 @@
 
 Manuscript in preparation for *IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing* (*J-STARS*):
 
-"The Extended Polarimetric Slope Sensing Technique"
+"E-PSS: the Extended Polarimetric Slope Sensing technique for measuring ocean surface waves"
 Nathan J. M. Laxague, Z. Göksu Duvarci, Lindsay Hogan, Junzhe Liu, Christopher Bouillon, and Christopher J. Zappa
 
 ## Contents
