@@ -7,6 +7,8 @@ Manuscript in preparation for *IEEE Journal of Selected Topics in Applied Earth 
 "The Extended Polarimetric Slope Sensing Technique"
 Nathan J. M. Laxague, Z. Göksu Duvarci, Lindsay Hogan, Junzhe Liu, Christopher Bouillon, and Christopher J. Zappa
 
+LaTeX source and Python scripts are licensed under [CC-BY](LICENSE).
+
 ## First Steps
 
 Clone the repository:
