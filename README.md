@@ -38,3 +38,6 @@ Make the paper:
 ```
 make paper
 ```
+
+## Acknowledgments
+The structure of this self-contained repository was inspired by [wave-modulation-paper](https://github.com/wavesgroup/wave-modulation-paper) by Prof. Milan Curcic at UMiami.
