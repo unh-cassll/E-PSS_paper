@@ -7,6 +7,7 @@ Created on Wed Sep 17 07:58:12 2025
 import sys
 
 sys.path.append('subroutines/')
+sys.path.append('../_codes/subroutines/')
 
 from pathlib import Path
 

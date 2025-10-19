@@ -2,8 +2,7 @@
 
 all: figures
 
-figures: compute_all_directional_spectra \
-	binned_omnispect \
+figures: binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
 	DoLP_AOI_field \
@@ -15,9 +14,6 @@ figures: compute_all_directional_spectra \
 	slope_stats \
 	Tm02_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
-
-compute_all_directional_spectra: compute_all_directional_spectra.py
-	python3 compute_all_directional_spectra.py
 	
 binned_omnispect: plot_binned_omnispect.py
 	python3 plot_binned_omnispect.py

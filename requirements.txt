@@ -2,3 +2,5 @@ matplotlib
 numpy
 xarray
 signal
+netCDF4
+seaborn
