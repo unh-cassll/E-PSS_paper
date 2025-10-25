@@ -29,6 +29,11 @@ Grab the observational data from its public repository
 **todo**
 ```
 
+Make the data:
+```
+make data
+```
+
 Make the figures:
 ```
 make figures

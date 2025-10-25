@@ -4,6 +4,11 @@ Created on Mon Sep 15 22:24:47 2025
 @author: nathanlaxague
 """
 
+import sys
+
+sys.path.append('subroutines/')
+sys.path.append('../_codes/subroutines/')
+
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +16,7 @@ import xarray as xr
 
 import netCDF4 as nc
 
-import fit_gram_charlier_slope_pdf as gc
+from utils import *
 
 output_file_name = '../_data/slope_statistics_dataset.nc'
 pathname = Path(output_file_name)
@@ -24,7 +29,7 @@ else:
     # Set custom property cycle colors
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
     
-    path = '../_data'
+    path = '../_data/'
     
     kappa = 0.4
     
@@ -90,9 +95,9 @@ else:
     
     for i in range(len(U10_m_s)):
         
-        out_struc_no = gc.fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_no[i,:,:], mss_upwind_no[i], mss_crosswind_no[i])
-        out_struc_lab = gc.fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_lab[i,:,:], mss_upwind_lab[i], mss_crosswind_lab[i])        
-        out_struc_emp = gc.fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_emp[i,:,:], mss_upwind_emp[i], mss_crosswind_emp[i])    
+        out_struc_no = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_no[i,:,:], mss_upwind_no[i], mss_crosswind_no[i])
+        out_struc_lab = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_lab[i,:,:], mss_upwind_lab[i], mss_crosswind_lab[i])        
+        out_struc_emp = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_emp[i,:,:], mss_upwind_emp[i], mss_crosswind_emp[i])    
         
         for j in range(7):
             
