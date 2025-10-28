@@ -41,7 +41,7 @@ import numpy as np
 def mem_distribution(moments, smoothing=32):
     """Implementation of the Maximum Entropy Method"""
 
-    dirs =  xr.Variable(dims=("direction"), data=np.arange(-180,180,5)-90)
+    dirs =  xr.Variable(dims=("direction"), data=np.arange(-180,180,5))
 
     c1 = moments["a1"] + 1j*moments["b1"]
     c2 = moments["a2"] + 1j*moments["b2"]

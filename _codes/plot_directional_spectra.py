@@ -32,6 +32,8 @@ fn = path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'
 ds = nc.Dataset(fn)
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
+
+ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
     
 elev_m = ds['elev_m'][:]
 slope_north = ds['slope_north'][:]
@@ -62,7 +64,7 @@ num_samples = np.size(elev_m,axis=1)
 nfft = num_samples/4
 nperseg = nfft/2
 
-run_ind = 135
+run_ind = 165
 
 lowcut_filter = 0.05
 highcut_filter = 1
@@ -113,9 +115,7 @@ dataset_Pyxis_frequency = xr.Dataset(
 
 Ffd = dataset_Pyxis_frequency.Ffd
 
-F_EPSS = compute_dirspec_EPSS(elev_m[run_ind,:],slope_east[run_ind,:],slope_north[run_ind,:],fs_Hz,lowcut_filter,highcut_filter,nfft,nperseg,smoothnum)
-
-F_EPSS = trim_EPSS_dirspec(F_EPSS,Ffd,theta_halfwidth,f_cut_high)
+F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]
 
 Ff_ADCP = dataset_ADCP.F_ADCP.integrate('direction')
 F_ADCP = dataset_ADCP.F_ADCP
@@ -197,7 +197,7 @@ ax0.set_ylim(1e-2,2e1)
 ax0.set_xlabel(r'$\theta$ [$\circ$]')
 ax0.set_ylabel('f [Hz]')
 ax0.text(0.04,0.93,'(a)',color='white',fontsize=12,ha='center',va='center',transform=ax0.transAxes)
-ax0.text(-81, 2.2e-2, 'MEM, ADCP',
+ax0.text(-37, 2.2e-2, 'MEM, ADCP',
          fontsize=12,
          color='black',
          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
@@ -212,7 +212,7 @@ ax1.set_ylim(1e-2,2e1)
 ax1.set_xlabel(r'$\theta$ [$\circ$]')
 ax1.set_yticklabels([])
 ax1.text(0.04,0.93,'(b)',color='white',fontsize=12,ha='center',va='center',transform=ax1.transAxes)
-ax1.text(-155, 2.2e-2, 'MEM, E-PSS',
+ax1.text(-40, 2.2e-2, 'MEM, E-PSS',
          fontsize=12,
          color='black',
          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))

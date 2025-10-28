@@ -96,9 +96,9 @@ f_Hz, Pxx_den_emp = signal.welch(elev_m_emp[run_ind,:], sampling_rate_PSS, npers
 fig = plt.figure(figsize=(6,5.5))
 
 plt.plot(f_Hz_lidar[2:len(f_Hz_lidar)],Pxx_den_lidar[2:len(f_Hz_lidar)],color='black',linewidth=2,label="lidar")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_no[2:len(f_Hz)],color=color_list[0],linewidth=2,label="E-PSS, no gain")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_lab[2:len(f_Hz)],color=color_list[1],linewidth=2,label="E-PSS, lab gain")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_emp[2:len(f_Hz)],color=color_list[2],linewidth=2,label="E-PSS, emp. gain")
+plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_no[2:len(f_Hz)],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
+plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_lab[2:len(f_Hz)],color=color_list[1],linewidth=2,alpha=0.75,label="E-PSS, lab gain")
+plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_emp[2:len(f_Hz)],color=color_list[2],linewidth=2,alpha=0.75,label="E-PSS, emp. gain")
 
 plt.grid(which='major', linestyle='-', linewidth=0.75)
 plt.grid(which='minor', linestyle=':', linewidth=0.75)

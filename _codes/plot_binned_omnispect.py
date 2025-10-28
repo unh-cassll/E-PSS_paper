@@ -112,7 +112,7 @@ F_f_slope_disp_binned = np.reshape(k_rad_m_slope_disp,(1,len(k_rad_m_slope_disp)
 B_f_slope_disp_binned = np.reshape(f_Hz_slope,(1,len(k_rad_m_slope_disp)))*S_f_binned
 B_f_binned = np.reshape(k_rad_m_disp,(1,len(k_rad_m_disp)))**2*np.reshape(f_Hz,(1,len(f_Hz)))*F_f_binned
 
-cmap = plt.get_cmap('magma')
+cmap = plt.get_cmap('cividis')
 color_min = np.min(U_centers)
 color_max = np.max(U_centers)    
 colors = [cmap(j) for j in np.linspace(0,1, len(U_centers))]  # Get colors from the colormap

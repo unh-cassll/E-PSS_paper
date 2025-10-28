@@ -1,6 +1,9 @@
-.PHONY: all clean figures
+.PHONY: all clean figures data
 
 all: paper
+
+data:
+	$(MAKE) -j 11 -C _data
 
 figures:
 	$(MAKE) -j 11 -C _codes

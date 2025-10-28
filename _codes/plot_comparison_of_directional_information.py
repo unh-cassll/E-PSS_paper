@@ -135,6 +135,15 @@ for run_ind in np.arange(0,num_runs):
     
     F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]
     
+    d_EPSS = F_EPSS['direction'].data
+    
+    f_inds = F_EPSS['frequency'] > 0.35
+    Fd_EPSS = np.sum(F_EPSS[f_inds,:].data,axis=0)
+    
+    ind = np.argmax(Fd_EPSS)
+    
+    MWD_EPSS_short[run_ind] = d_EPSS[ind]
+    
     Ff_EPSS[run_ind,:] = F_EPSS.integrate('direction')
     
     inds_exclude = (F_ADCP["frequency"].data > f_cut_high) | (F_ADCP["frequency"].data < f_low_filt)
@@ -195,8 +204,13 @@ MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] + 180
 inds_northerly = MWD_EPSS > 90
 MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] - 180
 MWD_diff = MWD_EPSS-MWD_ADCP_shifted
-# MWD_diff[MWD_diff>90] = MWD_diff[MWD_diff>90] - 180
-# MWD_diff[MWD_diff<-90] = MWD_diff[MWD_diff<-90] + 180
+
+# Unwrap angular differences arising from 180 degree ambiguity (short waves)
+inds_northerly = MWD_EPSS_short < -90
+MWD_EPSS_short[inds_northerly] = MWD_EPSS_short[inds_northerly] + 180
+inds_northerly = MWD_EPSS_short > 90
+MWD_EPSS_short[inds_northerly] = MWD_EPSS_short[inds_northerly] - 180
+MWD_diff_short = MWD_EPSS_short-MWD_ADCP_shifted
 
 # %%
 
@@ -213,9 +227,21 @@ bin_95CI = 1.96*bin_std/bin_counts
 bin_upper = bin_means + bin_95CI
 bin_lower = bin_means - bin_95CI
 
+inds_short = ~np.isnan(MWD_diff_short)
+
+bin_means_short, bin_edges_short, binnumber_short = stats.binned_statistic(U10_m_s[inds],MWD_diff_short[inds], statistic='mean', bins=U10_bin_edges)
+bin_std_short, _, _ = stats.binned_statistic(U10_m_s[inds],MWD_diff_short[inds], statistic='std', bins=U10_bin_edges)
+bin_counts_short, _, _ = stats.binned_statistic(U10_m_s[inds], MWD_diff_short[inds], statistic='count', bins=U10_bin_edges)
+
+bin_95CI_short = 1.96*bin_std_short/bin_counts_short
+bin_upper_short = bin_means_short + bin_95CI_short
+bin_lower_short = bin_means_short - bin_95CI_short
+
 fig = plt.figure(figsize=(6,6))
 plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
 plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
+plt.fill_between(U10_bin_centers, bin_upper_short, bin_lower_short, color=color_list[4], alpha=0.25)
+plt.plot(U10_bin_centers,bin_means_short,'-',color=color_list[4],linewidth=1,label=r'$\theta_{E-PSS,short}-\theta_{direct}$')
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(0,14)
 plt.yticks(np.arange(-360,360,30))
@@ -244,7 +270,7 @@ SPREAD_peak[:,1] = SPREAD_EPSS_peak
 
 labels = ['ADCP','E-PSS']
 
-run_ind = 135
+run_ind = 164
 spread_ADCP = SPREAD_ADCP[run_ind,:]
 spread_EPSS = SPREAD_EPSS[run_ind,:]
 
