@@ -55,7 +55,7 @@ fig = plt.figure(1,figsize=(12, 12))
 gs = fig.add_gridspec(2, 2)
 
 ax1 = fig.add_subplot(gs[0, :])
-ax1.plot(out_theta,out_DOLP,linewidth=3,label="Mueller calculus")
+ax1.plot(out_theta,out_DOLP,linewidth=3,label="Fresnel curve; ideal conditions")
 ax1.plot(AOI_camera,DoLP_camera,linewidth=3,label=r"avg. observed DoLP($\theta_i$)")
 ax1.plot(AOI_camera,DoLP_gain*DoLP_camera,linewidth=3,label="$ibid.$, empirical gain")
 ax1.set_xticks(np.arange(0,105,15))
