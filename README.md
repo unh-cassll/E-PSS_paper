@@ -24,8 +24,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Make the data (i.e., grab from public repository and produce intermediate products):
+Make the data (first, grab from public repository and produce intermediate products):
 ```
+python3 ../_codes/grab_observational_data.py
 make data
 ```
 
