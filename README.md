@@ -26,6 +26,7 @@ pip install -r requirements.txt
 
 Make the data (i.e., grab from public repository and produce intermediate products):
 ```
+make grab
 make data
 ```
 

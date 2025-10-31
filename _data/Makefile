@@ -1,9 +1,11 @@
 .PHONY: all data
 
-all: data
+all: grab \
+    data
 
-data: grab_observational_data \
-	compute_all_directional_spectra \
+grab: grab_observational_data \
+
+data: compute_all_directional_spectra \
 	compute_slope_statistics_from_PDFs
 
 grab_observational_data: ../_codes/grab_observational_data.py
