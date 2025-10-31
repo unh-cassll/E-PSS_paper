@@ -113,4 +113,4 @@ else:
     
     F_EPSS_ds.to_netcdf(output_file_name)
     
-    print("Done omputing frequency-directional spectra via E-PSS/MEM!")
+    print("Done computing frequency-directional spectra via E-PSS/MEM!")
