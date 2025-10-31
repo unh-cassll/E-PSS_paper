@@ -1,6 +1,6 @@
 .PHONY: all
 
-all: grab && data
+all: grab data
 
 grab: grab_observational_data \
 
