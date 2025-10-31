@@ -25,6 +25,8 @@ if pathname.exists():
     print(f"File already exists: {pathname}")
     
 else:
+    
+    print("Computing frequency-directional spectra via E-PSS/MEM...")
 
     g = 9.81;
     
@@ -110,3 +112,5 @@ else:
     F_EPSS_ds['run number'].attrs = {'units': 'sequential run number'}
     
     F_EPSS_ds.to_netcdf(output_file_name)
+    
+    print("Done omputing frequency-directional spectra via E-PSS/MEM!")

@@ -25,6 +25,8 @@ if pathname.exists():
     print(f"File already exists: {pathname}")
     
 else:
+    
+    print("Computing wave slope statistics...")
 
     # Set custom property cycle colors
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
@@ -151,4 +153,5 @@ else:
 
     slope_stats_ds.to_netcdf(output_file_name)
     
+    print("Done computing wave slope statistics!")
     
