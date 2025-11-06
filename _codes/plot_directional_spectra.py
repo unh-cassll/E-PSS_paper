@@ -12,8 +12,6 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
-from make_plots_v2 import plot_directional_spectrum
-
 from subroutines.utils import *
 
 g = 9.81;
