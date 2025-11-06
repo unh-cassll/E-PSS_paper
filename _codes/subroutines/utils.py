@@ -6,7 +6,13 @@ Created on Wed Oct 15 13:01:03 2025
 
 import numpy as np
 import xarray as xr
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.ticker as mticker
 
+from typing import Union
+
+import scipy.signal as signal
 from scipy.optimize import minimize
 from scipy.signal import butter, filtfilt
 
@@ -196,7 +202,7 @@ def compute_dirspec_EPSS(elev_m,slope_east,slope_north,fs_Hz,lowcut,highcut,nfft
         attrs = {"sampling_rate": fs_Hz}
         )
 
-    csp = spec.ClassicSpectralAnalysis(dataset, fs=dataset.sampling_rate, nfft=nfft, nperseg=nperseg)
+    csp = ClassicSpectralAnalysis(dataset, fs=dataset.sampling_rate, nfft=nfft, nperseg=nperseg)
 
     # computing the cross-spectral matrix
     Phi = csp.cross_spectral_matrix()
@@ -204,7 +210,7 @@ def compute_dirspec_EPSS(elev_m,slope_east,slope_north,fs_Hz,lowcut,highcut,nfft
     # computing the directional moments, aka first-five Fourier coefficients
     moments = csp.directional_moments(Phi)
 
-    D_EPSS = mem.mem_distribution(moments,smoothing=smoothnum)
+    D_EPSS = mem_distribution(moments,smoothing=smoothnum)
     D_EPSS.data = np.nan_to_num(D_EPSS.data,0)
     
     D_EPSS = D_EPSS/D_EPSS.integrate("frequency").integrate("direction")
@@ -420,9 +426,6 @@ def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnu
 # .. _Kuik et al. (1988): https://doi.org/10.1175/1520-0485(1988)018<1020:AMFTRA>2.0.CO;2
 # .. _Peláez-Zapata et al. (2024): https://theses.fr/2024UPASM004
 
-import numpy as np
-import xarray as xr
-import scipy.signal as signal
 
 class ClassicSpectralAnalysis(object):
     """This class implements the classic directional spectral analysis"""
@@ -495,17 +498,6 @@ class ClassicSpectralAnalysis(object):
 # The following code has been taken from the E-WDM code base, written by
 # D. Peláez-Zapata
 # Tweaked to modify some plotting details
-
-import xarray as xr
-import numpy as np
-import scipy.signal as signal
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.dates as mdates
-import matplotlib.ticker as mticker
-
-from typing import Union, Tuple
-
 
 # plot directional wave spectrum {{{
 def _smooth(E, ws=(5, 2)):
@@ -863,9 +855,6 @@ def plot_directional_spectrum(
 # .. _Christie (2024): https://www.sciencedirect.com/science/article/pii/S0141118723003711?via%3Dihub
 # .. _Simanesew et al. (2018): https://doi.org/10.1175/JTECH-D-17-0007.1
 #
-
-import xarray as xr
-import numpy as np
 
 def mem_distribution(moments, smoothing=32):
     """Implementation of the Maximum Entropy Method"""
