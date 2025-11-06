@@ -4,9 +4,6 @@ Created on Mon Sep 15 22:24:47 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 import xarray as xr
 

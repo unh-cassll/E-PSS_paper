@@ -1,7 +1,4 @@
 
-import sys
-sys.path.append('subroutines/')
-
 import pandas as pd
 import numpy as np
 

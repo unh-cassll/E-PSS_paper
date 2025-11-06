@@ -4,9 +4,6 @@ Created on Tue Sep  9 15:01:17 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 
 from scipy import signal

@@ -4,9 +4,6 @@ Created on Wed Sep 17 07:58:12 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 import xarray as xr
 
@@ -17,7 +14,7 @@ import seaborn as sns
 
 from make_plots_v2 import plot_directional_spectrum
 
-from utils import *
+from subroutines.utils import *
 
 g = 9.81;
 

@@ -4,11 +4,6 @@ Created on Wed Sep 17 07:58:12 2025
 @author: nathanlaxague
 """
 
-import sys
-
-sys.path.append('subroutines/')
-sys.path.append('../_codes/subroutines/')
-
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +11,7 @@ import xarray as xr
 
 import netCDF4 as nc
 
-from utils import *
+from subroutines.utils import *
 
 output_file_name = '../_data/ASIT2019_EPSS_directional_spectra.nc'
 pathname = Path(output_file_name)
@@ -28,7 +23,7 @@ else:
     
     print("Computing frequency-directional spectra via E-PSS/MEM...")
 
-    g = 9.81;
+    g = 9.81
     
     path = '../_data/'
     

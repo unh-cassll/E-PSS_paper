@@ -4,15 +4,11 @@ Created on Wed Sep 17 07:58:12 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 import xarray as xr
 
 import netCDF4 as nc
 from matplotlib import pyplot as plt
-from matplotlib.colors import BoundaryNorm
 
 import seaborn as sns
 
@@ -21,7 +17,7 @@ import scipy.signal as signal
 
 import scientimate
 
-from utils import *
+from subroutines.utils import *
 
 g = 9.81;
 

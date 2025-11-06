@@ -4,9 +4,6 @@ Created on Mon Sep 15 12:05:23 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import pandas as pd
 import numpy as np
 

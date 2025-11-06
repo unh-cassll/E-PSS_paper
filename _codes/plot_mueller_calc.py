@@ -4,9 +4,6 @@ Created on Thu Aug 28 11:39:01 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 
 from matplotlib import pyplot as plt
@@ -15,7 +12,7 @@ from matplotlib.colors import BoundaryNorm
 import seaborn as sns
 sns.set_theme(style="whitegrid")
 
-from utils import *
+from subroutines.utils import *
 
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 

@@ -4,9 +4,6 @@ Created on Mon Sep 15 15:40:31 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -15,7 +12,7 @@ import seaborn as sns
 
 import netCDF4 as nc
 
-from utils import *
+from subroutines.utils import *
 
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 

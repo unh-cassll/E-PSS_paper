@@ -4,9 +4,6 @@ Created on Tue Sep 16 19:45:25 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import numpy as np
 
 import netCDF4 as nc

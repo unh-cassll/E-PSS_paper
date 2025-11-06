@@ -4,9 +4,6 @@ Created on Wed Sep  3 11:05:07 2025
 @author: nathanlaxague
 """
 
-import sys
-sys.path.append('subroutines/')
-
 import matplotlib.pyplot as plt
 import numpy as np
 
