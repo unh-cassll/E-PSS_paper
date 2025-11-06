@@ -10,9 +10,6 @@ import xarray as xr
 from scipy.optimize import minimize
 from scipy.signal import butter, filtfilt
 
-import ClassicSpectralAnalysis as spec
-import mem_distribution as mem
-
 # %%
 
 # Mueller calculus
