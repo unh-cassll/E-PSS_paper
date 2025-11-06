@@ -13,7 +13,8 @@ LaTeX source and Python scripts are licensed under [CC-BY](LICENSE).
 
 Install the uv Python package manager
 ```
-git clone https://github.com/astral-sh/uv
+# see https://github.com/astral-sh/uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 Clone the repository:
