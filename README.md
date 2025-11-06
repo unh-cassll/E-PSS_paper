@@ -25,10 +25,9 @@ cd E-PSS_paper
 Install Python, create a virtual environment, and install the dependencies:
 ```
 uv python install 3.12
-uv venv --python 3.12.0
+uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -r requirements.txt
-
 ```
 
 Grab data from public repository:
