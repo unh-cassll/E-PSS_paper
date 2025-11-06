@@ -64,4 +64,4 @@ line_ax.text(3, 10, 'buoys, gauges', fontsize=12, rotation=90, color=colors[4], 
 line_ax.annotate('', xy=(1, 100), xytext=(1, 11), 
                  arrowprops=dict(arrowstyle='->', color=colors[4], lw=3))
 
-# plt.savefig('../_figures/wave_measurement_stommel_diagram.pdf',bbox_inches='tight')
+plt.savefig('../_figures/wave_measurement_stommel_diagram.pdf',bbox_inches='tight')
