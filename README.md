@@ -11,17 +11,24 @@ LaTeX source and Python scripts are licensed under [CC-BY](LICENSE).
 
 ## First Steps
 
+Install the uv Python package manager
+```
+git clone https://github.com/astral-sh/uv
+```
+
 Clone the repository:
 ```
 git clone https://github.com/unh-cassll/E-PSS_paper.git
 cd E-PSS_paper
 ```
 
-Create a Python virtual environment and install the dependencies:
+Install Python, create a virtual environment, and install the dependencies:
 ```
-python3 -m venv .venv
+uv python install 3.12
+uv venv --python 3.12.0
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip install -r requirements.txt
+
 ```
 
 Grab data from public repository:
