@@ -104,7 +104,7 @@ ax1.legend(loc='upper left')
 ax2 = ax1.twinx()
 
 # elevation timeseries
-ax2.plot(t,elev_m_emp,linewidth=2, label='r$\eta$', color=color_list[2])
+ax2.plot(t,elev_m_emp,linewidth=2, label='$\eta$', color=color_list[2])
 ax2.set_ylabel('$\eta$ [m]',color=color_list[2])
 ax2.tick_params(axis='y',labelcolor=color_list[2])
 
