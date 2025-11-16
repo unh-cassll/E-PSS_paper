@@ -14,6 +14,11 @@ import matplotlib.pyplot as plt
 
 from scipy import stats
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 # Set custom property cycle colors

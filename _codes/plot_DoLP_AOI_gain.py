@@ -13,6 +13,11 @@ import seaborn as sns
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 color_array = ['#4C2882', '#C39953', '#A52A2A', '#367588', '#2A52BE', '#006611']

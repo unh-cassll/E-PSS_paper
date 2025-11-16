@@ -14,6 +14,11 @@ import seaborn as sns
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 g = 9.81;
 
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
@@ -59,7 +64,7 @@ num_samples = np.size(elev_m,axis=1)
 nfft = num_samples/4
 nperseg = nfft/2
 
-run_ind = 165
+run_ind = 162
 
 lowcut_filter = 0.05
 highcut_filter = 1

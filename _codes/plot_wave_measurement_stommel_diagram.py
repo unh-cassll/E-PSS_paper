@@ -9,6 +9,11 @@ import numpy as np
 
 import seaborn as sns
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 g = 9.81

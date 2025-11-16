@@ -15,6 +15,8 @@ from typing import Union
 import scipy.signal as signal
 from scipy.optimize import minimize
 from scipy.signal import butter, filtfilt
+from scipy.signal import detrend
+import scientimate
 
 # %%
 
@@ -171,6 +173,119 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
     }
 
     return out_struc
+
+# %%
+
+# Fourier‑based conversion of surface‑wave slope to elevation.
+
+#     Parameters
+#     ----------
+#     slope_x, slope_y : array_like
+#         1‑D arrays of surface‑wave slope (m‑1) along x and y.
+#         Must have the same length.
+#     water_depth_m : float
+#         Water depth (m).  Use np.inf for deep water.
+#     dt : float
+#         Sampling interval (s).
+#     f_lp : float
+#         Low‑pass cut‑off frequency (Hz).  Energy above this is
+#         attenuated.
+#     f_hp : float
+#         High‑pass cut‑off frequency (Hz).  Energy below this is
+#         attenuated.
+
+#     Returns
+#     -------
+#     eta_slope : ndarray
+#         1‑D array of surface‑wave elevation (m), same length as
+#         the input time series.
+# 
+# N. Laxague 2025
+
+def slope_to_elev(
+    slope_x: np.ndarray,
+    slope_y: np.ndarray,
+    water_depth_m: float,
+    dt: float,
+    f_lp: float,
+    f_hp: float,
+) -> np.ndarray:
+
+    slope_x = np.asarray(slope_x, dtype=float).reshape(-1)
+    slope_y = np.asarray(slope_y, dtype=float).reshape(-1)
+
+    if slope_x.size != slope_y.size:
+        raise ValueError("slope_x and slope_y must have the same length")
+
+    N = slope_x.size
+
+    # If N is odd → drop last sample so that N is even
+    if N % 2 == 1:
+        slope_x = slope_x[:-1]
+        slope_y = slope_y[:-1]
+        N = slope_x.size
+
+    # Half‑length for the shifted frequency array
+    half_N = int(np.ceil(N / 2))
+
+    # Define frequency vector
+    f = np.arange(-half_N, half_N, dtype=float) / (N * dt)
+
+    # Positive‑frequency part (k is defined only for ω ≥ 0)
+    f_pos = f[half_N:]            # length = half_N
+    T_s = f_pos**-1
+    k_rad_m_disp, _, C_m_s_disp, Cg_m_s_disp = scientimate.wavedispersionds(water_depth_m, T_s, Uc=0)
+
+    # Full wavenumber array (mirror symmetry)
+    k = np.concatenate([-k_rad_m_disp[::-1], k_rad_m_disp])
+    
+    # Remove linear trend
+    s_x = detrend(slope_x)
+    s_y = detrend(slope_y)
+
+    # Compute FFT and shift
+    S_x = np.fft.fftshift(np.fft.fft(s_x))
+    S_y = np.fft.fftshift(np.fft.fft(s_y))
+
+    # Convert slope to elevation in Fourier space
+    S_x = 1j * S_x / k
+    S_y = 1j * S_y / k
+
+    # Replace infinities / NaNs caused by k=0 with zero
+    S_x = np.where(np.isfinite(S_x), S_x, 0.0)
+    S_y = np.where(np.isfinite(S_y), S_y, 0.0)
+
+    # Produce bandpass filter
+    # Find first index where f >= f_lp (low‑pass cutoff)
+    ind_lp = np.argmax(f >= f_lp)
+    # Find last index where f <= f_hp (high‑pass cutoff)
+    ind_hp = np.argmax(f <= f_hp)
+    
+    ind_lp = np.searchsorted(f, f_lp, side="left")
+    ind_hp = np.searchsorted(f, f_hp, side="right") - 1
+
+    # Build filter in the *half* domain
+    inds = np.arange(1, half_N + 1, dtype=float)
+
+    highpass_filt = 1 / (1 + np.exp(-5 * (inds - ind_hp + half_N)))
+    lowpass_filt = 1 - 1 / (1 + np.exp(-5 * (inds - ind_lp + half_N)))
+
+    ind_mid = int(np.floor((ind_lp + ind_hp - len(f)) / 2))
+    bandpass_filt = np.concatenate(
+        (highpass_filt[: ind_mid], lowpass_filt[ind_mid:])
+    )
+    combined_filt = np.concatenate([bandpass_filt[::-1], bandpass_filt])
+
+    # Apply the filter
+    S_x *= combined_filt
+    S_y *= combined_filt
+
+    # Combine Fourier amplitudes and produce real water surface elevation timeseries
+    elev_combined_Fourier = S_x + S_y
+    eta_slope = np.real(np.fft.ifft(np.fft.ifftshift(elev_combined_Fourier)))
+
+    return eta_slope
+
 
 # %%
 

@@ -13,6 +13,11 @@ import netCDF4 as nc
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 output_file_name = '../_data/slope_statistics_dataset.nc'
 pathname = Path(output_file_name)
 

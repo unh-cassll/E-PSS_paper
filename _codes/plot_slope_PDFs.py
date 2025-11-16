@@ -14,6 +14,11 @@ import netCDF4 as nc
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']

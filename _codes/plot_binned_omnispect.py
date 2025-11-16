@@ -5,6 +5,7 @@ Created on Tue Sep 16 19:45:25 2025
 """
 
 import numpy as np
+import xarray as xr
 
 import netCDF4 as nc
 
@@ -14,7 +15,12 @@ from matplotlib.colors import BoundaryNorm
 
 import scientimate
 
-from scipy import signal
+from subroutines.utils import *
+
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
@@ -27,7 +33,7 @@ path = '../_data/'
 
 ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
 
-elev_m_emp = ds_emp['elev_m'][:]
+ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
@@ -49,19 +55,8 @@ S_f = np.sum(S_f_theta,axis=1)*dtheta
 S_k = np.sum(np.reshape(k_rad_m_slope,(1,1,len(k_rad_m_slope)))*S_k_theta,axis=1)*dtheta
 B_k = np.sum(np.reshape(k_rad_m_slope,(1,1,len(k_rad_m_slope)))**2*S_k_theta,axis=1)*dtheta
 
-num_samples = len(elev_m_emp[1,:])
-nfft = num_samples/4
-nperseg = nfft/2
-num_freqs = np.int16(nfft/2+1)
-num_runs = len(U10_m_s)
-sampling_rate_PSS = 30
-
-F_f_m2_Hz_empirical_gain = np.nan*np.ones((num_freqs,num_runs))
-
-for run_ind in range(num_runs):
-    
-    f_Hz, Pxx_den = signal.welch(elev_m_emp[run_ind,:], sampling_rate_PSS, nfft=nfft, nperseg=nperseg)
-    F_f_m2_Hz_empirical_gain[:,run_ind] = Pxx_den
+f_Hz = ds_omnispect['frequency'][:].data
+F_f_m2_Hz_empirical_gain = ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data
    
 f_inds = f_Hz < 0.05
 F_f_m2_Hz_empirical_gain[[0,1],:] = np.nan
@@ -118,8 +113,9 @@ f_lims = [1e-2,2e1]
 Ff_lims = [1e-10,1e1]
 Bf_lims = [5e-6,5e-2]
 
-f_inds = f_Hz < 0.45
-k_inds = k_rad_m_disp < (2*np.pi*0.5)**2/9.81
+f_cut = 0.4
+f_inds = f_Hz < f_cut
+k_inds = k_rad_m_disp < (2*np.pi*f_cut)**2/9.81
 
 f_slope_inds = f_Hz_slope > 0.5
 

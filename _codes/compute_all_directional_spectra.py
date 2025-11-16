@@ -13,6 +13,11 @@ import netCDF4 as nc
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 output_file_name = '../_data/ASIT2019_EPSS_directional_spectra.nc'
 pathname = Path(output_file_name)
 
@@ -32,7 +37,6 @@ else:
     
     ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
         
-    elev_m = ds['elev_m'][:]
     slope_north = ds['slope_north'][:]
     slope_east = ds['slope_east'][:]
     
@@ -44,21 +48,27 @@ else:
     theta_rad_Pyxis = ds['theta_rad'][:]
     S_f_theta_Pyxis = ds['S_f_theta'][:]
                 
-    num_samples = len(elev_m[1,:])
-    nfft = num_samples/4
+    num_samples = len(slope_north[1,:])
+    nfft = num_samples/10
     nperseg = nfft/2
     
     num_runs = 190
     num_f = np.int16(nfft/2+1)
     
-    f_low_filt = 0.05
-    f_high_filt = 1
+    sampling_rate_PSS = 30
+    f_lp = 1/2
+    f_hp = 1/15
     
-    smoothnum = 5
+    spect_low_f = 0.05
+    spect_high_f = 1.0
     
-    theta_halfwidth = 120
+    water_depth_m = 15.0
     
-    f_cut_high = 0.45
+    smoothnum = 3
+    
+    theta_halfwidth = 90
+    
+    f_cut_high = 0.35
     
     num_dirs = 72
     
@@ -86,9 +96,19 @@ else:
             }
         )
         Ffd_direct = dataset_Pyxis_frequency.Ffd
+        
+        sE = slope_east[run_ind,:]
+        sN = slope_north[run_ind,:]
+        
+        sE = np.where(np.isfinite(sE), sE, 0.0)
+        sN = np.where(np.isfinite(sN), sN, 0.0)
+        
+        elev_m = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
                 
-        F_EPSS = compute_dirspec_EPSS(elev_m[run_ind,:],slope_east[run_ind,:],slope_north[run_ind,:],fs_Hz,f_low_filt,f_high_filt,nfft,nperseg,smoothnum)
+        F_EPSS = compute_dirspec_EPSS(elev_m,sE,sN,fs_Hz,spect_low_f,spect_high_f,nfft,nperseg,smoothnum)
         F_EPSS = trim_EPSS_dirspec(F_EPSS,Ffd_direct,theta_halfwidth,f_cut_high,smoothnum)
+        
+        F_EPSS = F_EPSS*np.var(elev_m)/F_EPSS.integrate('frequency').integrate('direction')
         
         F_EPSS_stack[:,:,run_ind] = F_EPSS.data
         

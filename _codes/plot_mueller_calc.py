@@ -14,6 +14,11 @@ sns.set_theme(style="whitegrid")
 
 from subroutines.utils import *
 
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 n = 1.33

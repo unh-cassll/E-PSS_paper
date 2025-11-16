@@ -1,18 +1,24 @@
+"""
+Created on Mon Sep 15 12:01:13 2025
+
+@author: nathanlaxague
+"""
 
 import pandas as pd
 import numpy as np
-
-from datetime import datetime
-
-import netCDF4 as nc
+import xarray as xr
 
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from scipy import signal
-
 from sklearn.metrics import mean_squared_error
 
+from subroutines.utils import *
+
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
@@ -21,82 +27,23 @@ plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#4C2882', '#367588', '#A52A
 
 path = '../_data/'
 
-ds_no = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc')
-ds_lab = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc')
-ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+f_lp = 1/2
+f_hp = 1/15
 
-elev_m_no = ds_no['elev_m'][:]
-elev_m_lab = ds_lab['elev_m'][:]
-elev_m_emp = ds_emp['elev_m'][:]
-
-ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
-
-elev_m_lidar = ds_other["wse_m_Riegl"][:]
-
-t_seconds_since_January_1_1970 = ds_other["t_seconds_since_January_1_1970"][:]
-
-DTime = [datetime.fromtimestamp(sec) for sec in t_seconds_since_January_1_1970]
-
-f_Hz_ADCP = ds_other["f_Hz_ADCP"][:]
-F_f_theta_m2_Hz_rad_ADCP = ds_other["F_f_theta_m2_Hz_rad_ADCP"[:]]
-
-dtheta_rad = 5*np.pi/180
-F_f_m2_Hz_ADCP = np.sum(F_f_theta_m2_Hz_rad_ADCP,axis=0)*dtheta_rad
-
-df_ADCP = np.median(np.diff(f_Hz_ADCP))
-
-
-nperseg = 1024
-num_freqs = np.int16(nperseg/2+1)
-num_runs = np.size(elev_m_lidar,axis=2)
-sampling_rate_PSS = 30
-sampling_rate_lidar = 10
-num_lidars = 3
-
-F_f_m2_Hz_lidar = np.nan*np.ones((num_freqs,num_runs,num_lidars))
-
-F_f_m2_Hz_no_gain = np.nan*np.ones((num_freqs,num_runs))
-F_f_m2_Hz_lab_gain = np.nan*np.ones((num_freqs,num_runs))
-F_f_m2_Hz_empirical_gain = np.nan*np.ones((num_freqs,num_runs))
-
-for run_ind in range(num_runs):
+ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
     
-    f_Hz, Pxx_den = signal.welch(elev_m_no[run_ind,:], sampling_rate_PSS, nperseg=nperseg)
-    F_f_m2_Hz_no_gain[:,run_ind] = Pxx_den
-    
-    f_Hz, Pxx_den = signal.welch(elev_m_lab[run_ind,:], sampling_rate_PSS, nperseg=nperseg)
-    F_f_m2_Hz_lab_gain[:,run_ind] = Pxx_den
-    
-    f_Hz, Pxx_den = signal.welch(elev_m_emp[run_ind,:], sampling_rate_PSS, nperseg=nperseg)
-    F_f_m2_Hz_empirical_gain[:,run_ind] = Pxx_den
-    
-    for lidar_ind in range(num_lidars):
-        
-        f_Hz_lidar, Pxx_den = signal.welch(elev_m_lidar[lidar_ind,:,run_ind], sampling_rate_lidar, nperseg=nperseg)
-        F_f_m2_Hz_lidar[:,run_ind,lidar_ind] = Pxx_den    
-    
-df = np.median(np.diff(f_Hz))    
-df_lidar = np.median(np.diff(f_Hz_lidar))    
+mask = np.zeros((len(ds_omnispect['frequency']),1))
+mask[(ds_omnispect['frequency'][:]>f_hp)&(ds_omnispect['frequency'][:]<f_lp)] = 1
+df = np.median(np.diff(ds_omnispect['frequency'][:]))
 
-F_f_m2_Hz_lidar = np.median(F_f_m2_Hz_lidar,axis=2)
-    
-f_lp = 1/3
-f_hp = 1/12
-mask_lidar = np.zeros((len(f_Hz_lidar),1))
-mask_lidar[(f_Hz_lidar>f_hp)&(f_Hz_lidar<f_lp)] = 1
-
-Hm0_lidar = 4*np.sqrt(np.sum(mask_lidar*F_f_m2_Hz_lidar,axis=0)*df_lidar)
+Hm0_lidar = 4*np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)*df)
 
 inds_exclude = Hm0_lidar < 0.1
 Hm0_lidar[inds_exclude] = np.nan
 
-nf = len(f_Hz)
-mask = np.zeros((nf,1))
-mask[(f_Hz>f_hp)&(f_Hz<f_lp)] = 1
-
-Hm0_no_gain = 4*np.sqrt((np.sum(mask*F_f_m2_Hz_no_gain,axis=0)*df))
-Hm0_lab_gain = 4*np.sqrt((np.sum(mask*F_f_m2_Hz_lab_gain,axis=0)*df))
-Hm0_emp_gain = 4*np.sqrt((np.sum(mask*F_f_m2_Hz_empirical_gain,axis=0)*df))
+Hm0_no_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
+Hm0_lab_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)*df))
+Hm0_emp_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)*df))
 
 data_size = len(Hm0_lidar)
 
@@ -104,8 +51,6 @@ big_reference = np.concatenate((Hm0_lidar,Hm0_lidar,Hm0_lidar))
 big_test = np.concatenate((Hm0_no_gain,Hm0_lab_gain,Hm0_emp_gain))
 category = np.concatenate((np.full(data_size, 'none'),np.full(data_size, 'lab'),np.full(data_size, 'empirical')))
 
-
-# Create a DataFrame
 data = pd.DataFrame({
     'lidar': big_reference,
     'EPSS': big_test,
@@ -197,8 +142,6 @@ plt.xticks(np.linspace(0,5,6))
 plt.yticks(np.linspace(0,5,6))
 plt.xlim(0,5)
 plt.ylim(0,5)
-
-# Customize the plot
 plt.xlabel(r'$H_{m0}$, lidar [m]')
 plt.ylabel(r'$H_{m0}$, E-PSS [m]')
 

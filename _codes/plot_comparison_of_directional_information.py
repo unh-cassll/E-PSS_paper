@@ -13,11 +13,15 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from scipy import stats
-import scipy.signal as signal
 
 import scientimate
 
 from subroutines.utils import *
+
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 g = 9.81;
 
@@ -37,7 +41,10 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
 
-elev_m = ds['elev_m'][:]
+ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
+f_Hz_omni = ds_omnispect['frequency'][:].data
+F_f_m2_Hz_omni = ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data
+f_Hz_omni[0] = np.nan
 
 f_Hz_Pyxis = ds['f_Hz'][:]
 theta_rad_Pyxis = ds['theta_rad'][:]
@@ -76,14 +83,20 @@ SPREAD_EPSS = np.nan*np.ones((num_runs,num_f))
 
 Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 
+sampling_rate_PSS = 30
 f_low_filt = 0.05
 f_high_filt = 1
+
+f_lp = 1
+f_hp = 1/15
+
+water_depth_m = 15
 
 smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_high = 0.45
+f_cut_high = 0.35
 
 for run_ind in np.arange(0,num_runs):
 
@@ -133,7 +146,7 @@ for run_ind in np.arange(0,num_runs):
     
     d_EPSS = F_EPSS['direction'].data
     
-    f_inds = F_EPSS['frequency'] > 0.35
+    f_inds = F_EPSS['frequency'] > 0.3
     Fd_EPSS = np.sum(F_EPSS[f_inds,:].data,axis=0)
     
     ind = np.argmax(Fd_EPSS)
@@ -170,11 +183,9 @@ for run_ind in np.arange(0,num_runs):
         ind_peak_ADCP[run_ind] = 0
         MWD_ADCP[run_ind] = np.nan
         SPREAD_ADCP[run_ind,:] = np.nan*np.ones((1,43))
-    
-    f_Hz_EPSS, Ff_m2_Hz_EPSS = signal.welch(elev_m[run_ind,:], fs_Hz, nperseg=nperseg)
-    f_Hz_EPSS[0] = np.nan
-    f_E = np.nansum(Ff_m2_Hz_EPSS)/np.nansum(f_Hz_EPSS**-1*Ff_m2_Hz_EPSS)
-    f_diff = np.abs(f_E-f_Hz_EPSS)
+        
+    f_E = np.nansum(F_f_m2_Hz_omni[:,run_ind])/np.nansum(f_Hz_omni**-1*F_f_m2_Hz_omni[:,run_ind])
+    f_diff = np.abs(f_E-f_Hz_omni)
     f_diff[0] = 1e3
     ind = np.argmin(f_diff)
     ind_peak_EPSS[run_ind] = ind
@@ -258,7 +269,7 @@ f_E = SPREAD_ADCP_peak.copy()
 for run_num in np.arange(0,num_runs):
     SPREAD_ADCP_peak[run_num] = SPREAD_ADCP[run_num,ind_peak_ADCP[run_num]]
     SPREAD_EPSS_peak[run_num] = SPREAD_EPSS[run_num,ind_peak_EPSS[run_num]]
-    f_E[run_num] = f_Hz_EPSS[ind_peak_EPSS[run_num]]
+    f_E[run_num] = f_Hz_omni[ind_peak_EPSS[run_num]]
 
 SPREAD_peak = np.nan*np.ones((num_runs,2))
 SPREAD_peak[:,0] = SPREAD_ADCP_peak
@@ -266,21 +277,21 @@ SPREAD_peak[:,1] = SPREAD_EPSS_peak
 
 labels = ['ADCP','E-PSS']
 
-run_ind = 164
+run_ind = 162
 spread_ADCP = SPREAD_ADCP[run_ind,:]
 spread_EPSS = SPREAD_EPSS[run_ind,:]
 
 fig,axs = plt.subplots(1,2,figsize=(12,5))
 axs[0].plot(F_ADCP["frequency"],spread_ADCP,label="ADCP",linewidth=2)
 axs[0].plot(F_EPSS["frequency"],spread_EPSS,label="E-PSS",linewidth=2)
-axs[0].plot(f_Hz_EPSS[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90])
+axs[0].plot(f_Hz_omni[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90])
 axs[0].set_xscale('log')
 axs[0].set_yticks(np.arange(0,360,15))
 axs[0].set_ylim(0,90)
 axs[0].set_xlim(1e-2,1e0)
 axs[0].set_xlabel('f [Hz]')
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$\circ$]')
-axs[0].text(f_Hz_EPSS[ind_peak_EPSS[run_ind]]*0.8,82.5,r'$f_E$',color=color_list[2])
+axs[0].text(f_Hz_omni[ind_peak_EPSS[run_ind]]*0.8,82.5,r'$f_E$',color=color_list[2])
 axs[0].legend()
 
 axs[0].grid(which='major', linestyle='-', linewidth=0.75)  # Major gridlines with solid linestyle
