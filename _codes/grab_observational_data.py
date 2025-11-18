@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 # define URL and list of filenames to grab
 URL = "https://zenodo.org/records/17621023/files/"
-filenames_to_grab = ["ASIT2019_supporting_environmental_observations.nc", "ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_no_gain.nc", "Elfouhaily_et_al_1997_cumulative_mss.nc", "Piermont2025_DoLP_AoI_observations.nc", "Run051_example_Stokes_parameters.nc"]
+filenames_to_grab = ["ASIT2019_supporting_environmental_observations.nc", "ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_no_gain.nc","slope_statistics_dataset.nc", "Elfouhaily_et_al_1997_cumulative_mss.nc", "Piermont2025_DoLP_AoI_observations.nc", "Run051_example_Stokes_parameters.nc"]
 suffix = "?download=1"
 
 local_dir = '_data'
