@@ -49,8 +49,9 @@ else:
     
     elev_m_lidar = ds_other["wse_m_Riegl"][:]
 
-    nperseg = 1024
-    num_freqs = np.int16(nperseg/2+1)
+    nfft = 3000
+    nperseg = 1500
+    num_freqs = np.int16(nfft/2+1)
     num_runs = np.size(elev_m_lidar,axis=2)
     sampling_rate_PSS = 30
     sampling_rate_lidar = 10
@@ -61,7 +62,7 @@ else:
     
     water_depth_m = 15.0
     f_lp = 1/2
-    f_hp = 1/15
+    f_hp = 1/12
     
     F_f_m2_Hz_lidar = np.nan*np.ones((num_freqs,num_runs,num_lidars))
     
@@ -92,18 +93,18 @@ else:
         elev_m_emp = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
         elev_m_emp = elev_m_emp[::subnum]
         
-        f_Hz, Pxx_den = signal.welch(elev_m_no, sampling_rate_lidar, nperseg=nperseg)
+        f_Hz, Pxx_den = signal.welch(elev_m_no, sampling_rate_lidar, nfft=nfft, nperseg=nperseg)
         F_f_m2_Hz_no_gain[:,run_ind] = Pxx_den
         
-        f_Hz, Pxx_den = signal.welch(elev_m_lab, sampling_rate_lidar, nperseg=nperseg)
+        f_Hz, Pxx_den = signal.welch(elev_m_lab, sampling_rate_lidar, nfft=nfft, nperseg=nperseg)
         F_f_m2_Hz_lab_gain[:,run_ind] = Pxx_den
         
-        f_Hz, Pxx_den = signal.welch(elev_m_emp, sampling_rate_lidar, nperseg=nperseg)
+        f_Hz, Pxx_den = signal.welch(elev_m_emp, sampling_rate_lidar, nfft=nfft, nperseg=nperseg)
         F_f_m2_Hz_empirical_gain[:,run_ind] = Pxx_den
         
         for lidar_ind in range(num_lidars):
             
-            f_Hz, Pxx_den = signal.welch(elev_m_lidar[lidar_ind,:,run_ind], sampling_rate_lidar, nperseg=nperseg)
+            f_Hz, Pxx_den = signal.welch(elev_m_lidar[lidar_ind,:,run_ind], sampling_rate_lidar, nfft=nfft, nperseg=nperseg)
             F_f_m2_Hz_lidar[:,run_ind,lidar_ind] = Pxx_den    
             
     F_f_m2_Hz_lidar = np.median(F_f_m2_Hz_lidar,axis=2)

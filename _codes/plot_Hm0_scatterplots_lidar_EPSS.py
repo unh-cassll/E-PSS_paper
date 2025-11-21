@@ -27,8 +27,8 @@ plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#4C2882', '#367588', '#A52A
 
 path = '../_data/'
 
-f_lp = 1/2
-f_hp = 1/15
+f_lp = 0.3
+f_hp = 0.08
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
     

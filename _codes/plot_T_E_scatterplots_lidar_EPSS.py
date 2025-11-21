@@ -27,35 +27,36 @@ plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#4C2882', '#367588', '#A52A
 
 path = '../_data/'
 
-f_lp = 1/2
-f_hp = 1/15
+f_lp = 0.3
+f_hp = 0.08
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
     
 f_Hz = ds_omnispect['frequency'][:].data
 nf = len(f_Hz)
-mask = np.zeros((nf,1))
-mask[(ds_omnispect['frequency'][:]>f_hp)&(ds_omnispect['frequency'][:]<f_lp)] = 1
+mask = np.ones((nf,1))
+mask[(ds_omnispect['frequency'][:]<f_hp)|(ds_omnispect['frequency'][:]>f_lp)] = np.nan
 df = np.median(np.diff(f_Hz))
 
 T_s = f_Hz.reshape(nf,1)**-1
+T_s[0] = 0
 
-Hm0_no_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
-Hm0_lab_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)*df))
-Hm0_emp_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)*df))
+Hm0_no_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
+Hm0_lab_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)*df))
+Hm0_emp_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)*df))
 
-Tm02_no_gain = np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)/np.sum(mask*T_s**-2*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0))
-Tm02_lab_gain = np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)/np.sum(mask*T_s**-2*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0))
-Tm02_emp_gain = np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)/np.sum(mask*T_s**-2*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0))
-Tm02_lidar = np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)/np.sum(mask*T_s**-2*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0))
+T_E_no_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0))
+T_E_lab_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0))
+T_E_emp_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0))
+T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0))
 
-inds_exclude = (Tm02_lidar > 20) | (Tm02_lidar < 4)
-Tm02_lidar[inds_exclude] = np.nan
+inds_exclude = (T_E_lidar > 20) | (T_E_lidar < 4.5) | (Hm0_emp_gain < 0.1)
+T_E_lidar[inds_exclude] = np.nan
 
-data_size = len(Tm02_lidar)
+data_size = len(T_E_lidar)
 
-big_reference = np.concatenate((Tm02_lidar,Tm02_lidar,Tm02_lidar))
-big_test = np.concatenate((Tm02_no_gain,Tm02_lab_gain,Tm02_emp_gain))
+big_reference = np.concatenate((T_E_lidar,T_E_lidar,T_E_lidar))
+big_test = np.concatenate((T_E_no_gain,T_E_lab_gain,T_E_emp_gain))
 category = np.concatenate((np.full(data_size, 'none'),np.full(data_size, 'lab'),np.full(data_size, 'empirical')))
 
 data = pd.DataFrame({
@@ -66,9 +67,9 @@ data = pd.DataFrame({
 
 metrics = {}
 proxy_estimates = ['none', 'lab', 'empirical']
-x = Tm02_lidar
-for Tm02_estimate in proxy_estimates:
-    Y = data[data["DoLP gain"] == Tm02_estimate]
+x = T_E_lidar
+for T_E_estimate in proxy_estimates:
+    Y = data[data["DoLP gain"] == T_E_estimate]
     y = Y.EPSS
     inds_keep = (~np.isnan(x) & ~np.isnan(y))
     rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
@@ -77,7 +78,7 @@ for Tm02_estimate in proxy_estimates:
     p = np.polyfit(x[inds_keep], y[inds_keep],1)
     slope = p[0]
     intercept = p[1]
-    metrics[Tm02_estimate] = (correlation_coefficient, rmse, slope, intercept)
+    metrics[T_E_estimate] = (correlation_coefficient, rmse, slope, intercept)
 
 g = sns.lmplot(
     data=data,
@@ -108,8 +109,8 @@ offset_line = 'bias = '
 
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 
-plt.gca().add_patch(plt.Rectangle((3.09, 7.5), 3.25, 1.42, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((3.09, 7.5), 3.25, 1.42, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((3.1, 8.25), 3.8, 1.7, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((3.1, 8.25), 3.8, 1.7, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 
 x_position = 0.03
@@ -143,10 +144,10 @@ plt.text(x_position, y_position-0.09, 's', color='k', transform=plt.gca().transA
     
 plt.xticks(np.linspace(3,11,9))
 plt.yticks(np.linspace(3,11,9))
-plt.xlim(3,9)
-plt.ylim(3,9)
+plt.xlim(3,10)
+plt.ylim(3,10)
 
-plt.xlabel(r'$T_{m02}$, lidar [s]')
-plt.ylabel(r'$T_{m02}$, E-PSS [s]')
+plt.xlabel(r'$T_{E}$, lidar [s]')
+plt.ylabel(r'$T_{E}$, E-PSS [s]')
 
-plt.savefig('../_figures/Tm02_comparison_lidar_EPSS.pdf',bbox_inches='tight')
+plt.savefig('../_figures/T_E_comparison_lidar_EPSS.pdf',bbox_inches='tight')

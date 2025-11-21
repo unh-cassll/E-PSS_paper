@@ -12,7 +12,7 @@ figures: binned_omnispect \
 	slope_elev_timeseries_and_spectra \
 	slope_PDFs \
 	slope_stats \
-	Tm02_scatterplots_lidar_EPSS \
+	T_E_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
 	
 binned_omnispect: plot_binned_omnispect.py
@@ -45,8 +45,8 @@ slope_PDFs: plot_slope_PDFs.py
 slope_stats: plot_slope_stats.py
 	python3 plot_slope_stats.py
 
-Tm02_scatterplots_lidar_EPSS: plot_Tm02_scatterplots_lidar_EPSS.py
-	python3 plot_Tm02_scatterplots_lidar_EPSS.py
+T_E_scatterplots_lidar_EPSS: plot_T_E_scatterplots_lidar_EPSS.py
+	python3 plot_T_E_scatterplots_lidar_EPSS.py
 
 wave_measurement_stommel_diagram: plot_wave_measurement_stommel_diagram.py
 	python3 plot_wave_measurement_stommel_diagram.py
