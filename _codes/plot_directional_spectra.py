@@ -5,6 +5,7 @@ Created on Wed Sep 17 07:58:12 2025
 @author: nathanlaxague
 """
 
+
 import numpy as np
 import xarray as xr
 
@@ -17,6 +18,13 @@ import seaborn as sns
 
 
 from subroutines.utils import *
+
+
+import warnings
+
+
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 
 g = 9.81;
@@ -41,10 +49,6 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
     
-slope_north = ds['slope_north'][:]
-slope_east = ds['slope_east'][:]
-
-
 f_Hz = ds['f_Hz'][:]
 
 
@@ -71,14 +75,7 @@ U_sfc_mag_m_s = ds_other["U_sfc_mag_m_s"]
 U_sfc_dir_deg = ds_other["U_sfc_dir_deg"]
 
 
-num_samples = np.size(slope_north,axis=1)
-
-
-nfft = num_samples/4
-nperseg = nfft/2
-
-
-run_ind = 165
+run_ind = 162
 
 
 lowcut_filter = 0.05
