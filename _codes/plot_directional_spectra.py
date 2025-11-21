@@ -41,7 +41,6 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
     
-elev_m = ds['elev_m'][:]
 slope_north = ds['slope_north'][:]
 slope_east = ds['slope_east'][:]
 
@@ -72,7 +71,7 @@ U_sfc_mag_m_s = ds_other["U_sfc_mag_m_s"]
 U_sfc_dir_deg = ds_other["U_sfc_dir_deg"]
 
 
-num_samples = np.size(elev_m,axis=1)
+num_samples = np.size(slope_north,axis=1)
 
 
 nfft = num_samples/4
