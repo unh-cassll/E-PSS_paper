@@ -884,7 +884,7 @@ def plot_directional_spectrum(
     if levels is None:
         pc = ax.pcolormesh(
             frqx, frqy, smoothed[1:,1:], cmap=cmap,
-            shading="flat", vmin=vmin, vmax=vmax
+            shading="flat",rasterized='true', vmin=vmin, vmax=vmax
         )
     else:
         pc = ax.contourf(
