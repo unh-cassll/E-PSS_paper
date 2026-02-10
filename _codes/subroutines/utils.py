@@ -234,7 +234,9 @@ def slope_to_elev(
     # Positive‑frequency part (k is defined only for ω ≥ 0)
     f_pos = f[half_N:]            # length = half_N
     T_s = f_pos**-1
-    k_rad_m_disp, _, C_m_s_disp, Cg_m_s_disp = scientimate.wavedispersionds(water_depth_m, T_s, Uc=0)
+    h_vec = np.full((half_N,1),water_depth_m)
+    h_vec = np.asarray(h_vec, dtype=float).reshape(-1)
+    k_rad_m_disp, _, C_m_s_disp, Cg_m_s_disp = scientimate.wavedispersionds(h_vec, T_s, Uc=0)
 
     # Full wavenumber array (mirror symmetry)
     k = np.concatenate([-k_rad_m_disp[::-1], k_rad_m_disp])
