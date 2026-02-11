@@ -93,7 +93,7 @@ C_m_s_disp, Cg_m_s_disp = lindisp_with_current(2*np.pi*f_Hz,h_m,0)
 k_rad_m_disp = 2*np.pi*f_Hz / C_m_s_disp
 
 C_m_s_slope_disp, Cg_m_s_slope_disp = lindisp_with_current(2*np.pi*f_Hz_slope,h_m,0)
-k_rad_m_slope_disp = 2*np.pi*f_Hz / C_m_s_slope_disp
+k_rad_m_slope_disp = 2*np.pi*f_Hz_slope / C_m_s_slope_disp
 
 k_vec = np.reshape(k_rad_m_slope,(1,len(k_rad_m_slope)))
 k_slope_disp_vec = np.reshape(k_rad_m_slope_disp,(1,len(k_rad_m_slope_disp)))
