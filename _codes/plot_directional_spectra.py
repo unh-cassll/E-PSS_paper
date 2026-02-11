@@ -127,7 +127,7 @@ D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum
 # Directional wave spectra (polar plot)
 
 vmin, vmax = -3.5,-1.5
-axes_kw={"rmax": 0.6, "rstep": 0.1, "as_period": True}
+axes_kw={"rmax": 0.6, "rstep": 0.1, "as_period": False}
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,12/2), layout="constrained")
 plot_directional_spectrum(
     np.log10(F_ADCP), ax=ax1, levels=None, colorbar=False,
@@ -144,6 +144,9 @@ plot_directional_spectrum(
 )
 _ = ax1.set(xlabel="", ylabel="", title="MEM, ADCP")
 _ = ax2.set(xlabel="", ylabel="", title="MEM, E-PSS")
+
+ax1.grid(False)
+ax2.grid(False)
 
 plt.savefig('../_figures/directional_spectra_polar.pdf',bbox_inches='tight')
 
@@ -203,4 +206,5 @@ cbar.set_label(r'$D(f,\theta)$')
 plt.tight_layout()
 
 plt.savefig('../_figures/directional_spectra_combined.pdf',bbox_inches='tight')
+
 

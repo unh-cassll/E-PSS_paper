@@ -38,6 +38,7 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 U10_m_s = ds_other["COARE_U10"]
 
 f_Hz_slope = ds_emp['f_Hz'][:]
+f_Hz_slope = f_Hz_slope.data
 k_rad_m_slope = ds_emp['k_rad_m'][:]
 theta_rad = ds_emp['theta_rad'][:]
 S_f_theta = ds_emp['S_f_theta'][:]

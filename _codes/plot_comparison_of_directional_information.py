@@ -42,7 +42,6 @@ ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
 f_Hz_omni = ds_omnispect['frequency'][:].data
 F_f_m2_Hz_omni = ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data
-f_Hz_omni[0] = np.nan
 
 f_Hz_Pyxis = ds['f_Hz'][:]
 theta_rad_Pyxis = ds['theta_rad'][:]
@@ -96,7 +95,9 @@ theta_halfwidth = 120
 
 f_cut_high = 0.35
 
-f_E = (np.nansum(f_Hz_omni.reshape(len(f_Hz_omni),1)**-1*F_f_m2_Hz_omni,axis=0)/np.nansum(F_f_m2_Hz_omni,axis=0))**-1
+f_Hz_copy = f_Hz_omni.copy()
+f_Hz_copy[0] = np.nan
+f_E = (np.nansum(f_Hz_copy.reshape(len(f_Hz_copy),1)**-1*F_f_m2_Hz_omni,axis=0)/np.nansum(F_f_m2_Hz_omni,axis=0))**-1
 
 for run_ind in np.arange(0,num_runs):
 
@@ -198,10 +199,13 @@ for run_ind in np.arange(0,num_runs):
 h_m_ADCP = 18.3
 h_m_EPSS = 15
 
-C_m_s_disp_ADCP, Cg_m_s_disp_ADCP = lindisp_with_current(2*np.pi*Tm01_ADCP**-1,h_m_ADCP,0)
+omega_ADCP = 2*np.pi*Tm01_ADCP**-1
+omega_EPSS = 2*np.pi*Tm01_EPSS**-1
+
+C_m_s_disp_ADCP, Cg_m_s_disp_ADCP = lindisp_with_current(omega_ADCP,h_m_ADCP,0)
 k_rad_m_disp_ADCP = 2*np.pi*Tm01_ADCP**-1 / C_m_s_disp_ADCP
 
-C_m_s_disp_EPSS, Cg_m_s_disp_EPSS = lindisp_with_current(2*np.pi*Tm01_EPSS**-1,h_m_ADCP,0)
+C_m_s_disp_EPSS, Cg_m_s_disp_EPSS = lindisp_with_current(omega_EPSS,h_m_ADCP,0)
 k_rad_m_disp_EPSS = 2*np.pi*Tm01_EPSS**-1 / Cg_m_s_disp_EPSS
 
 # Account for wave refraction (coastline is approximately East-West, so MWD is already shore-relative)
@@ -325,4 +329,5 @@ for n in np.arange(2):
     axs[n].text(0.05,0.95,panel_labels[n],fontsize=12,ha='center',va='center',transform=axs[n].transAxes)
     
 plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
+
 
