@@ -16,7 +16,7 @@ import scipy.signal as signal
 from scipy.optimize import minimize
 from scipy.signal import butter, filtfilt
 from scipy.signal import detrend
-import scientimate
+from scipy import interpolate
 
 # %%
 
@@ -173,6 +173,63 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
     }
 
     return out_struc
+    
+# %%
+
+# Given wave radian frequency, water depth, and current speed, obtains celerity and group speed
+
+# N. Laxague 2026
+
+def lindisp_with_current(omega, h, current_m_s):
+    """
+    Linear dispersion relation with current
+    
+    Parameters:
+    -----------
+    omega : array-like
+        Angular frequency
+    h : array-like
+        Water depth
+    current_m_s : array-like
+        Current velocity
+    
+    Returns:
+    --------
+    c : array
+        Phase speed
+    cg : array
+        Group velocity
+    """
+    # Ensure inputs are column vectors
+    omega[omega == 0] = np.nan
+    omega = np.atleast_1d(omega).flatten()
+    h = np.atleast_1d(h).flatten()
+    current_m_s = np.atleast_1d(current_m_s).flatten()
+    
+    # Constants
+    g = 9.806  # gravitational acceleration
+    rho_w = 1020  # water density
+    sigma = 0.072  # surface tension
+    
+    # Wave number vector
+    k_vec = np.logspace(-4, 4, 100)
+    
+    # Dispersion relation with current
+    omega_disp = np.sqrt((g*k_vec + sigma/rho_w*k_vec**3) * np.tanh(k_vec*h)) + k_vec*current_m_s
+    
+    # Create interpolation function
+    k_from_omega = interpolate.interp1d(omega_disp, k_vec, kind='cubic')
+    
+    # Find wave number for given frequencies
+    k = k_from_omega(omega)
+    
+    # Phase speed
+    c = omega / k
+    
+    # Group velocity
+    cg = c/2 * (1 + (2*k*h) / np.sinh(2*k*h))
+    
+    return c, cg
 
 # %%
 
@@ -233,10 +290,8 @@ def slope_to_elev(
 
     # Positive‑frequency part (k is defined only for ω ≥ 0)
     f_pos = f[half_N:]            # length = half_N
-    T_s = f_pos**-1
-    h_vec = np.full((half_N,1),water_depth_m)
-    h_vec = np.asarray(h_vec, dtype=float).reshape(-1)
-    k_rad_m_disp, _, C_m_s_disp, Cg_m_s_disp = scientimate.wavedispersionds(h_vec, T_s, Uc=0)
+    C_m_s_disp, Cg_m_s_disp = lindisp_with_current(2*np.pi*f_pos,water_depth_m,0)
+    k_rad_m_disp = 2*np.pi*f_pos / C_m_s_disp
 
     # Full wavenumber array (mirror symmetry)
     k = np.concatenate([-k_rad_m_disp[::-1], k_rad_m_disp])

@@ -14,8 +14,6 @@ import seaborn as sns
 
 from scipy import stats
 
-import scientimate
-
 from subroutines.utils import *
 
 import warnings
@@ -200,8 +198,11 @@ for run_ind in np.arange(0,num_runs):
 h_m_ADCP = 18.3
 h_m_EPSS = 15
 
-k_rad_m_disp_ADCP, _, C_m_s_disp_ADCP, Cg_m_s_disp_ADCP = scientimate.wavedispersionds(h_m_ADCP, Tm01_ADCP, Uc=0)
-k_rad_m_disp_EPSS, _, C_m_s_disp_EPSS, Cg_m_s_disp_EPSS = scientimate.wavedispersionds(h_m_EPSS, Tm01_EPSS, Uc=0)
+C_m_s_disp_ADCP, Cg_m_s_disp_ADCP = lindisp_with_current(2*np.pi*Tm01_ADCP**-1,h_m_ADCP,0)
+k_rad_m_disp_ADCP = 2*np.pi*Tm01_ADCP**-1 / C_m_s_disp_ADCP
+
+C_m_s_disp_EPSS, Cg_m_s_disp_EPSS = lindisp_with_current(2*np.pi*Tm01_EPSS**-1,h_m_ADCP,0)
+k_rad_m_disp_EPSS = 2*np.pi*Tm01_EPSS**-1 / Cg_m_s_disp_EPSS
 
 # Account for wave refraction (coastline is approximately East-West, so MWD is already shore-relative)
 MWD_ADCP_shifted = np.asin(C_m_s_disp_EPSS/C_m_s_disp_ADCP*np.sin(MWD_ADCP*np.pi/180))*180/np.pi

@@ -13,8 +13,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
-import scientimate
-
 from subroutines.utils import *
 
 import warnings
@@ -90,8 +88,11 @@ T_s = f_Hz**-1
 T_s_slope = f_Hz_slope**-1
 h_m = 15
 
-k_rad_m_disp, _, C_m_s_disp, Cg_m_s_disp = scientimate.wavedispersionds(h_m, T_s, Uc=0)
-k_rad_m_slope_disp, _, C_m_s_slope_disp, Cg_m_s_slope_disp = scientimate.wavedispersionds(h_m, T_s_slope, Uc=0)
+C_m_s_disp, Cg_m_s_disp = lindisp_with_current(2*np.pi*f_Hz,h_m,0)
+k_rad_m_disp = 2*np.pi*f_Hz / C_m_s_disp
+
+C_m_s_slope_disp, Cg_m_s_slope_disp = lindisp_with_current(2*np.pi*f_Hz_slope,h_m,0)
+k_rad_m_slope_disp = 2*np.pi*f_Hz / C_m_s_slope_disp
 
 k_vec = np.reshape(k_rad_m_slope,(1,len(k_rad_m_slope)))
 k_slope_disp_vec = np.reshape(k_rad_m_slope_disp,(1,len(k_rad_m_slope_disp)))
