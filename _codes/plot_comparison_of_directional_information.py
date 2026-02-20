@@ -12,6 +12,8 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
+from sklearn.metrics import mean_squared_error
+
 from scipy import stats
 
 from subroutines.utils import *
@@ -72,7 +74,7 @@ SPREAD_EPSS = np.nan*np.ones((num_runs,num_f))
 
 Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 
-f_low_filt = 0.05
+f_low_filt = 0.01
 f_high_filt = 1
 
 f_lp = 1/2
@@ -84,7 +86,8 @@ smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_high = 0.5
+f_cut_low = 0.05
+f_cut_high = 0.3
 
 f_Hz_copy = f_Hz_omni.copy()
 f_Hz_copy[0] = np.nan
@@ -118,10 +121,10 @@ for run_ind in np.arange(0,num_runs):
     
     Ff_EPSS[run_ind,:] = F_EPSS.integrate('direction')
     
-    inds_exclude = (F_ADCP["frequency"].data > f_cut_high) | (F_ADCP["frequency"].data < f_low_filt)
+    inds_exclude = (F_ADCP["frequency"].data > f_cut_high) | (F_ADCP["frequency"].data < f_cut_low)
     F_ADCP.data[inds_exclude,:] = 0
 
-    inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_low_filt)
+    inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
     F_EPSS.data[inds_exclude,:] = 0
                
     mwd_EPSS, spread_EPSS = compute_mean_wave_direction_and_spreading(F_EPSS,theta_halfwidth,smoothnum)
@@ -131,7 +134,7 @@ for run_ind in np.arange(0,num_runs):
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
     
     if total_energy > 0:
-        mwd_ADCP, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP,theta_halfwidth,smoothnum=3)
+        mwd_ADCP, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP,theta_halfwidth,smoothnum)
         
         Ff_ADCP = F_ADCP.integrate('direction').data
         f_E_ADCP = np.sum(Ff_ADCP)/np.sum(f_Hz_ADCP**-1*Ff_ADCP)
@@ -180,6 +183,16 @@ inds_northerly = MWD_EPSS > 90
 MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] - 180
 MWD_diff = MWD_EPSS-MWD_ADCP_shifted
 
+metrics = {}
+
+# Compute relevant statistics comparing MWD estimates from ADCP and E-PSS
+x = MWD_ADCP_shifted
+y = MWD_EPSS
+inds_keep = (~np.isnan(x) & ~np.isnan(y))
+mae = np.nanmean(MWD_diff)
+rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
+metrics[0] = (mae, rmse)
+
 # %%
 
 U10_bin_edges = np.arange(1,15,2)
@@ -201,7 +214,7 @@ plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(0,14)
 plt.yticks(np.arange(-360,360,30))
-plt.ylim(-180,180)
+plt.ylim(-90,90)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
 
@@ -220,6 +233,14 @@ for run_num in np.arange(0,num_runs):
 SPREAD_peak = np.nan*np.ones((num_runs,2))
 SPREAD_peak[:,0] = SPREAD_ADCP_peak
 SPREAD_peak[:,1] = SPREAD_EPSS_peak
+
+# Compute relevant statistics comparing spreading estimates from ADCP and E-PSS
+x = SPREAD_ADCP_peak
+y = SPREAD_EPSS_peak
+inds_keep = (~np.isnan(x) & ~np.isnan(y))
+mae = np.nanmean(x[inds_keep]-y[inds_keep])
+rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
+metrics[1] = (mae, rmse)
 
 labels = ['ADCP','E-PSS']
 
@@ -271,6 +292,7 @@ for n in np.arange(2):
     axs[n].text(0.05,0.95,panel_labels[n],fontsize=12,ha='center',va='center',transform=axs[n].transAxes)
     
 plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
+
 
 
 
