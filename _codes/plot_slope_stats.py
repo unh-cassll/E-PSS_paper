@@ -164,8 +164,8 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
     axs[row_index,col_index].set_xlim(0,14)
     axs[row_index,col_index].set_ylim(y_lims[i,:])
     axs[row_index,col_index].set_xticks(np.arange(0,16,2))
-    axs[row_index,col_index].text(0.05,0.95,panel_labels[i],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
-    if i == 1:
+    axs[row_index,col_index].text(0.95,0.95,panel_labels[i],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
+    if i == 0:
         axs[row_index,col_index].legend()
 
 axs[row_index,col_index].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
@@ -179,7 +179,7 @@ axs[row_index,col_index].set_ylabel('counts per bin')
 axs[row_index,col_index].set_xlim(0,14)
 axs[row_index,col_index].set_ylim(0,40)
 axs[row_index,col_index].set_xticks(np.arange(0,16,2))
-axs[row_index,col_index].text(0.05,0.95,panel_labels[i+1],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
+axs[row_index,col_index].text(0.95,0.95,panel_labels[i+1],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
     
 plt.tight_layout()
 
