@@ -8,7 +8,7 @@ data:
 figures:
 	$(MAKE) -j 11 -C _codes
 
-paper: paper.tex references.bib
+paper: paper_R1.tex references.bib
 	pdflatex -halt-on-error $@
 	bibtex $@
 	pdflatex -halt-on-error $@
