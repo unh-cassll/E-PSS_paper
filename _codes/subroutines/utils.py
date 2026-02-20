@@ -415,55 +415,81 @@ def bandpass_filter(data, lowcut, highcut, fs, order=5):
 
 # N. Laxague 2025
 
-def trim_EPSS_dirspec(F_EPSS,Ffd_direct,theta_halfwidth,f_cut_high,smoothnum=3):
+def trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum=3):
     
-    Ff_EPSS = F_EPSS.integrate("direction")
-    
-    D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T    
-    D_direct = ((Ffd_direct.T / Ffd_direct.integrate("direction")).rolling(frequency=9, center=True).median()).T
-    
-    D_EPSS.data = np.nan_to_num(D_EPSS.data,0)
-    D_direct.data = np.nan_to_num(D_direct.data,0)
-    
-    D_EPSS_reference = D_EPSS.copy()
-    
-    inds_consider_short = D_direct["frequency"] > f_cut_high    
-    Ftheta_direct_short = Ffd_direct[inds_consider_short,:].integrate("frequency")
-        
-    ind_peak_short = np.argmax(Ftheta_direct_short.data)
-        
-    wavedir = D_EPSS["direction"].copy()
-    wavedir_short = D_direct["direction"].copy()
-    freqs = D_EPSS["frequency"].copy()
-        
-    ind_cut_direct = next(x[0] for x in enumerate(freqs) if x[1] > f_cut_high)-1
-    inds_cut_direct = freqs > f_cut_high
-    D_EPSS.data[inds_cut_direct,:] = 0
+    theta_halfwidth = 90
 
+    f = F_EPSS["frequency"].data
+    D = F_EPSS["direction"].data
+    Ff_EPSS = F_EPSS.integrate("direction")
+
+    D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T    
+
+    D_EPSS.data = np.nan_to_num(D_EPSS.data,0)
+
+    Sm = np.nanmean(np.sin(np.pi/180*D)*F_EPSS.data)
+
+    Cm = np.nanmean(np.cos(np.pi/180*D)*F_EPSS.data)
+
+    Vm = 180/np.pi*np.atan2(Sm,Cm)
+
+    direction_mega = np.hstack([D-720,D-360,D,D+360,D+720])
+    spect_mega = Ff_EPSS.data[:,np.newaxis] * np.hstack([D_EPSS.data,D_EPSS.data,D_EPSS.data,D_EPSS.data,D_EPSS.data])
+
+    spect_mega_copy = spect_mega.copy()
+
+    f_ind_start = np.argmax(f > fmin)-1
+    f_ind_end = np.argmax(f > fmax)-1
+
+    dir_diff = np.abs(Vm-direction_mega)
+    d_ind_start = np.argmin(dir_diff)
+
+    inds_base = np.arange(0,len(D))-np.int8(len(D)/2)
     
-    Dslice = D_EPSS.data[ind_cut_direct,:]
-    wavedir_diff = np.mod(np.abs(wavedir.data-wavedir_short.data[ind_peak_short])+360,360)
-    inds_trim = (wavedir_diff > theta_halfwidth) & (wavedir_diff < 360-theta_halfwidth)
-    Dslice[inds_trim] = 0
-    ind_peak_first = np.argmax(Dslice)
-    wavedir_diff = np.mod(np.abs(wavedir.data-wavedir_short.data[ind_peak_first])+360,360)
-    inds_trim = (wavedir_diff > theta_halfwidth) & (wavedir_diff < 360-theta_halfwidth)
-    D_EPSS.data[ind_cut_direct,inds_trim] = 0
+    lower_ind_halfwidth = np.int8(len(D)/2-theta_halfwidth/5.0)
+    upper_ind_halfwidth = np.int8(lower_ind_halfwidth+len(D)/2)
     
-    for index in np.arange(1,ind_cut_direct):
-        i = ind_cut_direct - index
-        Dslice = D_EPSS.data[i+1,:]
+    lower_ind_quarterwidth = np.int8(len(D)/2-theta_halfwidth/5.0/4)
+    upper_ind_quarterwidth = np.int8(lower_ind_quarterwidth+theta_halfwidth/5.0/2)
+
+    inds_inside = d_ind_start + inds_base
+    inds_outside = inds_inside + len(D)
+    inds_lower = direction_mega < direction_mega[inds_inside[lower_ind_halfwidth]]
+    inds_higher = direction_mega > direction_mega[inds_inside[upper_ind_halfwidth]]
+    inds_exclude = inds_lower | inds_higher
+
+    inds_low_f = np.arange(0,f_ind_start)
+    spect_mega_copy[inds_low_f,:] = 0
+
+    spect_mega_copy[f_ind_start,inds_inside] = spect_mega_copy[f_ind_start,inds_inside] + spect_mega_copy[f_ind_start,inds_outside]
+    spect_mega_copy[f_ind_start,inds_exclude] = 0
+
+    for i in np.arange(f_ind_start+1,f_ind_end):
+                
+        inds_lower = direction_mega < direction_mega[inds_inside[lower_ind_quarterwidth]]
+        inds_higher = direction_mega > direction_mega[inds_inside[upper_ind_quarterwidth]]
+        inds_exclude = inds_lower | inds_higher
         
-        ind_peak_next = np.argmax(Dslice)
+        spect_slice = spect_mega_copy[i,:].copy()
+        spect_slice[inds_exclude] = 0
+        ind_p = np.argmax(spect_slice)
         
-        wavedir_diff = np.mod(np.abs(wavedir.data-wavedir.data[ind_peak_next])+360,360)
-        inds_trim = (wavedir_diff > theta_halfwidth) & (wavedir_diff < 360-theta_halfwidth)
-        D_EPSS.data[i,inds_trim] = 0
-        
-    D_EPSS = D_EPSS*np.sum(D_EPSS_reference)/np.sum(D_EPSS)
-    
-    # Re-compute the directional wave spectrum
-    F_EPSS = Ff_EPSS * D_EPSS
+        inds_inside = ind_p + inds_base
+        inds_outside = inds_inside + 72
+        inds_lower = direction_mega < direction_mega[inds_inside[lower_ind_halfwidth]]
+        inds_higher = direction_mega > direction_mega[inds_inside[upper_ind_halfwidth]]
+        inds_exclude = inds_lower | inds_higher
+
+        spect_mega_copy[i,inds_inside] = spect_mega_copy[i,inds_inside] + spect_mega_copy[i,inds_outside]
+        spect_mega_copy[i,inds_exclude] = 0
+
+    inds_high_f = np.arange(f_ind_end,len(f))
+    spect_mega_copy[inds_high_f,:] = 0
+
+    inds_center = np.arange(0,len(D)) + 2*len(D)
+    spect_trimmed = spect_mega_copy[:,inds_center]
+
+    F_EPSS.data = spect_trimmed
 
     return F_EPSS
 
@@ -1056,3 +1082,4 @@ def mem_distribution(moments, smoothing=32):
         .rolling(frequency=smoothing, center=True)
         .median()
     )
+

@@ -60,7 +60,7 @@ else:
     f_hp = 1/15
     
     spect_low_f = 0.05
-    spect_high_f = 1.0
+    spect_high_f = 1
     
     water_depth_m = 15.0
     
@@ -68,6 +68,10 @@ else:
     
     theta_halfwidth = 90
     
+    fmin = 5e-2
+    fmax = 6e-1
+    
+    f_cut_spect = 0.5
     f_cut_high = 0.35
     
     num_dirs = 72
@@ -106,7 +110,7 @@ else:
         elev_m = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
                 
         F_EPSS = compute_dirspec_EPSS(elev_m,sE,sN,fs_Hz,spect_low_f,spect_high_f,nfft,nperseg,smoothnum)
-        F_EPSS = trim_EPSS_dirspec(F_EPSS,Ffd_direct,theta_halfwidth,f_cut_high,smoothnum)
+        F_EPSS = trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum)
         
         F_EPSS = F_EPSS*np.var(elev_m)/F_EPSS.integrate('frequency').integrate('direction')
         
@@ -129,3 +133,4 @@ else:
     F_EPSS_ds.to_netcdf(output_file_name)
     
     print("Done computing frequency-directional spectra via E-PSS/MEM!")
+

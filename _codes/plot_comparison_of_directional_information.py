@@ -32,9 +32,6 @@ panel_labels = ['(a)','(b)']
 
 path = '../_data/'
 
-fn = path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'
-ds = nc.Dataset(fn)
-
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
@@ -43,15 +40,12 @@ ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
 f_Hz_omni = ds_omnispect['frequency'][:].data
 F_f_m2_Hz_omni = ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data
 
-f_Hz_Pyxis = ds['f_Hz'][:]
-theta_rad_Pyxis = ds['theta_rad'][:]
-S_f_theta_Pyxis = ds['S_f_theta'][:]
-
 f_Hz_ADCP = ds_other['f_Hz_ADCP'][:]
 theta_rad_ADCP = ds_other['theta_rad'][:]
 Fftheta_m2_Hz_rad_ADCP = ds_other['F_f_theta_m2_Hz_rad_ADCP'][:]
 
 U10_m_s = ds_other["COARE_U10"][:]
+winddir_deg = ds_other["COARE_Wdir"][:]
 
 theta_rad_ADCP = theta_rad_ADCP[np.arange(0,len(theta_rad_ADCP)-1)]
 
@@ -69,8 +63,6 @@ nperseg = np.int16((num_f-1)*2)
 
 MWD_ADCP = np.nan*np.ones(num_runs)
 MWD_EPSS = MWD_ADCP.copy()
-MWD_EPSS_short = MWD_ADCP.copy()
-MWD_short = MWD_ADCP.copy()
 Tm01_EPSS = MWD_ADCP.copy()
 Tm01_ADCP = MWD_ADCP.copy()
 ind_peak_ADCP = np.int16(np.ones(num_runs))
@@ -80,7 +72,6 @@ SPREAD_EPSS = np.nan*np.ones((num_runs,num_f))
 
 Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 
-sampling_rate_PSS = 30
 f_low_filt = 0.05
 f_high_filt = 1
 
@@ -93,37 +84,14 @@ smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_high = 0.35
+f_cut_high = 0.5
 
 f_Hz_copy = f_Hz_omni.copy()
 f_Hz_copy[0] = np.nan
 f_E = (np.nansum(f_Hz_copy.reshape(len(f_Hz_copy),1)**-1*F_f_m2_Hz_omni,axis=0)/np.nansum(F_f_m2_Hz_omni,axis=0))**-1
 
 for run_ind in np.arange(0,num_runs):
-
-    S_f_theta_Pyxis_particular = S_f_theta_Pyxis[run_ind,:,:]
-    S_theta = np.sum(S_f_theta_Pyxis_particular,axis=1)
-    ind = np.argmax(S_theta)
-    short_mwd = 180/np.pi*theta_rad_Pyxis[ind]
-    
-    k_disp = (2*np.pi*f_Hz_Pyxis)**2/g
-    k_disp_mat = np.tile(k_disp,(len(theta_rad_Pyxis),1))
-    Fftheta_m2_Hz_rad_Pyxis = (S_f_theta_Pyxis_particular*k_disp_mat**-2).T
-
-    Fftheta_m2_Hz_rad_Pyxis_shifted = np.concatenate((Fftheta_m2_Hz_rad_Pyxis[:,np.arange(36,72)],Fftheta_m2_Hz_rad_Pyxis[:,np.arange(0,36)]),axis=1)
-    theta_rad_Pyxis_shifted = np.concatenate((theta_rad_Pyxis[np.arange(36,72)]-2*np.pi,theta_rad_Pyxis[np.arange(0,36)]))
-
-    # creating dataset (Pyxis frequency spectrum)
-    dataset_Pyxis_frequency = xr.Dataset(
-        coords = {"frequency": f_Hz_Pyxis, "direction": 180/np.pi*theta_rad_Pyxis_shifted},
-        data_vars = {
-            "Ffd": (["frequency", "direction"], Fftheta_m2_Hz_rad_Pyxis_shifted*np.pi/180)
-        }
-    )
-    Ffd_direct = dataset_Pyxis_frequency.Ffd
-    
-    MWD_short[run_ind] = short_mwd
-    
+        
     Fftheta_m2_Hz_rad_ADCP_particular = Fftheta_m2_Hz_rad_ADCP[:,:,run_ind].T
     
     Fftheta_m2_Hz_rad_ADCP_particular = Fftheta_m2_Hz_rad_ADCP_particular[:,np.arange(0,len(theta_deg_ADCP)-1)]
@@ -145,14 +113,8 @@ for run_ind in np.arange(0,num_runs):
     
     F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]
     
+    f_EPSS = F_EPSS['frequency'].data
     d_EPSS = F_EPSS['direction'].data
-    
-    f_inds = F_EPSS['frequency'] > 0.3
-    Fd_EPSS = np.sum(F_EPSS[f_inds,:].data,axis=0)
-    
-    ind = np.argmax(Fd_EPSS)
-    
-    MWD_EPSS_short[run_ind] = d_EPSS[ind]
     
     Ff_EPSS[run_ind,:] = F_EPSS.integrate('direction')
     
@@ -163,7 +125,7 @@ for run_ind in np.arange(0,num_runs):
     F_EPSS.data[inds_exclude,:] = 0
                
     mwd_EPSS, spread_EPSS = compute_mean_wave_direction_and_spreading(F_EPSS,theta_halfwidth,smoothnum)
-    MWD_EPSS[run_ind] = mwd_EPSS
+    MWD_EPSS[run_ind] = mwd_EPSS*-1+90
     SPREAD_EPSS[run_ind,:] = spread_EPSS
     
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
@@ -218,13 +180,6 @@ inds_northerly = MWD_EPSS > 90
 MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] - 180
 MWD_diff = MWD_EPSS-MWD_ADCP_shifted
 
-# Unwrap angular differences arising from 180 degree ambiguity (short waves)
-inds_northerly = MWD_EPSS_short < -90
-MWD_EPSS_short[inds_northerly] = MWD_EPSS_short[inds_northerly] + 180
-inds_northerly = MWD_EPSS_short > 90
-MWD_EPSS_short[inds_northerly] = MWD_EPSS_short[inds_northerly] - 180
-MWD_diff_short = MWD_EPSS_short-MWD_ADCP_shifted
-
 # %%
 
 U10_bin_edges = np.arange(1,15,2)
@@ -240,28 +195,15 @@ bin_95CI = 1.96*bin_std/bin_counts
 bin_upper = bin_means + bin_95CI
 bin_lower = bin_means - bin_95CI
 
-inds_short = ~np.isnan(MWD_diff_short)
-
-bin_means_short, bin_edges_short, binnumber_short = stats.binned_statistic(U10_m_s[inds],MWD_diff_short[inds], statistic='mean', bins=U10_bin_edges)
-bin_std_short, _, _ = stats.binned_statistic(U10_m_s[inds],MWD_diff_short[inds], statistic='std', bins=U10_bin_edges)
-bin_counts_short, _, _ = stats.binned_statistic(U10_m_s[inds], MWD_diff_short[inds], statistic='count', bins=U10_bin_edges)
-
-bin_95CI_short = 1.96*bin_std_short/bin_counts_short
-bin_upper_short = bin_means_short + bin_95CI_short
-bin_lower_short = bin_means_short - bin_95CI_short
-
 fig = plt.figure(figsize=(6,6))
 plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
 plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
-plt.fill_between(U10_bin_centers, bin_upper_short, bin_lower_short, color=color_list[4], alpha=0.25)
-plt.plot(U10_bin_centers,bin_means_short,'-',color=color_list[4],linewidth=1,label=r'$\theta_{E-PSS,short}-\theta_{direct}$')
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(0,14)
 plt.yticks(np.arange(-360,360,30))
-plt.ylim(-90,90)
+plt.ylim(-180,180)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
-plt.legend()
 
 plt.savefig('../_figures/delta_theta_nought.pdf',bbox_inches='tight')
 
@@ -329,5 +271,6 @@ for n in np.arange(2):
     axs[n].text(0.05,0.95,panel_labels[n],fontsize=12,ha='center',va='center',transform=axs[n].transAxes)
     
 plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
+
 
 
