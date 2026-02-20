@@ -213,8 +213,8 @@ plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alp
 plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(0,14)
-plt.yticks(np.arange(-360,360,30))
-plt.ylim(-90,90)
+plt.yticks(np.arange(-360,360,15))
+plt.ylim(-45,45)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
 
@@ -292,6 +292,7 @@ for n in np.arange(2):
     axs[n].text(0.05,0.95,panel_labels[n],fontsize=12,ha='center',va='center',transform=axs[n].transAxes)
     
 plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
+
 
 
 

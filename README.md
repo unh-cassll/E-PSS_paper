@@ -46,9 +46,9 @@ Make the figures:
 make figures
 ```
 
-Make the paper:
+Make the paper (revised version):
 ```
-make paper
+make paper_R1
 ```
 
 ## Acknowledgments
