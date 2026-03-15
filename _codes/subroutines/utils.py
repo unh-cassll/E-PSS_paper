@@ -9,6 +9,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
+import seaborn as sns
 
 from typing import Union
 
@@ -17,6 +18,51 @@ from scipy.optimize import minimize
 from scipy.signal import butter, filtfilt
 from scipy.signal import detrend
 from scipy import interpolate
+
+# %%
+
+# Figure style function
+
+def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
+
+    fsize = 10
+    lw = 1.0
+
+    sns.set_context("paper", rc={
+        "axes.grid": True, 
+        "font.size": fsize,  
+        "axes.titlesize": title_fontsize, 
+        "axes.labelsize": label_fontsize, 
+        "xtick.labelsize": tick_fontsize, 
+        "ytick.labelsize": tick_fontsize,
+        "grid.linewidth": lw,
+        "xtick.major.width": lw,
+        "ytick.major.width": lw,
+    })
+
+    sns.set_theme(style="ticks",palette="deep",font="Fira Sans")
+
+    color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
+    plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
+    
+    plt.rcParams.update({
+        'axes.grid': True,
+        'font.size': fsize,
+        'axes.titlesize': title_fontsize,
+        'axes.labelsize': label_fontsize,
+        'xtick.labelsize': tick_fontsize,
+        'ytick.labelsize': tick_fontsize,
+        'legend.fontsize': label_fontsize,
+        'grid.linewidth': lw,
+        'xtick.major.width': lw,
+        'ytick.major.width': lw,
+    })
+    
+    # Full page figure size (assuming letter paper with 0.5 inch margins
+    fullwidth = 7.5
+    fullheight = 10
+	
+    return color_list, fullwidth, fullheight, fsize
 
 # %%
 

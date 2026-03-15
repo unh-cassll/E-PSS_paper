@@ -14,16 +14,12 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-# Set custom property cycle colors
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611'])
 
 path = '../_data/'
 
@@ -83,9 +79,9 @@ for T_E_estimate in proxy_estimates:
 g = sns.lmplot(
     data=data,
     x="lidar", y="EPSS", hue="DoLP gain",
-    scatter_kws = {'alpha': 0.5,'s':15},
+    scatter_kws = {'alpha': 0.5,'s':10},
     line_kws = {'alpha': 0.75},
-    height=6,
+    height=fullwidth/2,
     aspect=1,
     legend=False
 )
@@ -99,47 +95,53 @@ slope_values = [metrics['none'][2], metrics['lab'][2], metrics['empirical'][2]]
 offset_values = [metrics['none'][3], metrics['lab'][3], metrics['empirical'][3]]
 colors = ['#4C2882', '#367588', '#A52A2A']
 
-r2_line = 'R² = '
+r2_line = 'R²'
     
-rmse_line = 'RMSE = '
+rmse_line = 'RMSE'
 
-slope_line = 'slope = '
+slope_line = 'slope'
 
-offset_line = 'bias = '
+offset_line = 'bias'
 
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
+equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((3.1, 8.25), 3.8, 1.7, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((3.1, 8.25), 3.8, 1.7, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((3.1, 8.2), 4.5, 1.7, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((3.1, 8.2), 4.5, 1.7, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
-
-x_position = 0.03
-y_position = 0.88
+# Add the textbox to the plot
+x_position = 0.02  # Starting x position for the text
+y_position = 0.93  # Starting y position for the text
 delta_x = [0.03,0.03,0.04]
-plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=10,
+plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize*0.9,
         verticalalignment='top')
+plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+        verticalalignment='top')
+        
+x_position_start = x_position
+        
+proxy_labels = proxy_estimates.copy()
+proxy_labels[2] = 'emp'
 
-plt.text(0.32,0.98, 'DoLP gain', transform=plt.gca().transAxes, fontsize=12,
-        verticalalignment='top',horizontalalignment='center')
-
-x_position += 0.02
-for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_estimates, delta_x):
-    x_position += 0.12
-    plt.text(x_position+delta_x_val, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=10,
+# Split the text into lines and add each line with the specified color
+x_position += 0.05  # Move over
+for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_labels, delta_x):
+    x_position += 0.14  # Move over
+    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top',horizontalalignment='center')
-    plt.text(x_position, y_position, f'{r2:.2f}', color=color, transform=plt.gca().transAxes, fontsize=10,
+    plt.text(x_position, y_position, f'{r2:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
-    plt.text(x_position, y_position-0.03, f'{rmse:.2f}', color=color, transform=plt.gca().transAxes, fontsize=10,
+    plt.text(x_position, y_position-0.049, f'{rmse:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
-    plt.text(x_position, y_position-0.06, f'{slope:.2f}', color=color, transform=plt.gca().transAxes, fontsize=10,
+    plt.text(x_position, y_position-0.098, f'{slope:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
-    plt.text(x_position, y_position-0.09, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=10,
+    plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
 
-x_position += 0.1
-plt.text(x_position, y_position-0.03, 's', color='k', transform=plt.gca().transAxes, fontsize=10,
+x_position += 0.13  # Move over
+plt.text(x_position, y_position-0.049, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
-plt.text(x_position, y_position-0.09, 's', color='k', transform=plt.gca().transAxes, fontsize=10,
+plt.text(x_position, y_position-0.147, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
     
 plt.xticks(np.linspace(3,11,9))

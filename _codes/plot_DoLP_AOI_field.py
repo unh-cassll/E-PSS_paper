@@ -13,16 +13,12 @@ import seaborn as sns
 import netCDF4 as nc
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
@@ -71,7 +67,7 @@ sky_DoLP = [DoLP_overcast_sky,DoLP_sunny_sky]
 
 titles = ['overcast','cloudless']
 
-fig, axs = plt.subplots(2,1, sharex=True, sharey=False, figsize=(6, 10))
+fig, axs = plt.subplots(2,1, sharex=True, sharey=False, figsize=(fullwidth/2, fullwidth))
 
 axs[0].plot(AoI_overcast,DoLP_overcast,linewidth=2,label='wide')
 axs[0].plot(AoI_overcast_narrow,DoLP_overcast_narrow,'*',label='narrow')
@@ -87,11 +83,11 @@ for panel_index in np.arange(0,2):
     axs[panel_index].set_ylim(0,1.1)
     axs[panel_index].set_xticks(np.arange(0,105,15))
     axs[panel_index].set_ylabel('DoLP')
-    axs[panel_index].text(0.05,0.95,panel_labels[panel_index],fontsize=12,ha='center',va='center',transform=axs[panel_index].transAxes)
+    axs[panel_index].text(0.95,0.95,panel_labels[panel_index],fontsize=fsize,ha='center',va='center',transform=axs[panel_index].transAxes)
     sky_DoLP_val = sky_DoLP[panel_index]
     axs[panel_index].set_title(titles[panel_index]+ ' (sky DoLP = ' + f"{sky_DoLP_val:.3f}" ')')
 
-axs[0].legend(loc='upper right')
+axs[0].legend(loc='upper left')
 axs[1].set_xlabel(r'$\theta_i$ [$\circ$]')
     
 plt.tight_layout()

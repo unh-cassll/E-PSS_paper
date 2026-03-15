@@ -13,12 +13,6 @@ paper: paper.tex references.bib
 	bibtex $@
 	pdflatex -halt-on-error $@
 	pdflatex -halt-on-error $@
-	
-paper_R1: paper_R1.tex references.bib
-	pdflatex -halt-on-error $@
-	bibtex $@
-	pdflatex -halt-on-error $@
-	pdflatex -halt-on-error $@
 
 clean:
-	$(RM) *.aux *.bbl *.blg *.cut *fdb_latexmk *.fls *.log *.out *.pdf _figures/*
+	$(RM) *.aux *.bbl *.blg *.cut *fdb_latexmk *.fls *.log *.out *.pdf _figures/*.pdf

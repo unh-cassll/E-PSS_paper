@@ -14,16 +14,13 @@ import matplotlib.pyplot as plt
 
 from scipy import stats
 
+from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
+
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-# Set custom property cycle colors
-color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
@@ -78,7 +75,7 @@ mss_BH = np.nan*np.ones((len(U10_m_s_vec),2))
 mss_BH[:,0] = 3e-3 + 1.85*1e-3*U10_m_s_vec
 mss_BH[:,1] = 1e-3 + 3.16*1e-3*U10_m_s_vec
 
-fig, axs = plt.subplots(1, 2, sharey=True, figsize=(12, 6))
+fig, axs = plt.subplots(1, 2, sharey=True, figsize=(fullwidth, fullwidth/2))
 
 titles = ['crosswind','upwind']
 suffix_tags = ['c','u']
@@ -88,7 +85,7 @@ for i in np.arange(2):
     bin_upper = mss_BH[:,i] + 5e-4
     bin_lower = mss_BH[:,i] - 5e-4
     axs[1-i].fill_between(U10_m_s_vec, bin_upper, bin_lower, color='black', alpha=0.15)
-    axs[1-i].plot(U10_m_s_vec,mss_BH[:,i],'-',linewidth=1,color='black',label=r'Bréon & Henriot [2006]',markersize=10)
+    axs[1-i].plot(U10_m_s_vec,mss_BH[:,i],'-',linewidth=1,color='black',label='B & H [2006]',markersize=10)
 
     for j in np.arange(len(dolp_gain_choices)):
         
@@ -120,7 +117,7 @@ axs[0].plot(ds_Elfouhaily['U10'][:],ds_Elfouhaily['mss_u_block'][particular_ind]
 axs[1].plot(ds_Elfouhaily['U10'][:],ds_Elfouhaily['mss_c_block'][particular_ind],'--',color=[0,0,0.5],label=r'E97, $k<100$ rad m$^{-1}$')
     
 axs[0].set_ylabel('mss')
-axs[0].legend(loc='upper left')
+axs[1].legend(loc='upper left')
 
 plt.tight_layout()
 
@@ -128,7 +125,7 @@ plt.savefig('../_figures/mss_upwind_crosswind.pdf',bbox_inches='tight')
 
 #%% Gram-Charlier coefficients from least-squares fits to slope PDFs
 
-fig, axs = plt.subplots(3, 2, sharex=True, figsize=(12, 14))
+fig, axs = plt.subplots(3, 2, sharex=True, figsize=(fullwidth, fullheight*0.9))
 
 for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_stats_output_names_truncated):
     
@@ -158,15 +155,15 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
     bin_lower = BH_slope_stats[slope_stats_output_names[i]] - slope_stats_uncertainties[i]
     
     axs[row_index,col_index].fill_between(BH_slope_stats['U10'], bin_upper, bin_lower, color='black', alpha=0.15)
-    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[slope_stats_output_names[i]],label=r'Bréon & Henriot [2006]',color='black',linewidth=2)
-    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[slope_stats_output_names[i]],':',label=r'Cox & Munk [1954]',color='black',linewidth=2)
+    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[slope_stats_output_names[i]],label='B & H [2006]',color='black',linewidth=2)
+    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[slope_stats_output_names[i]],':',label='C & M [1954]',color='black',linewidth=2)
     axs[row_index,col_index].set_ylabel(varname)
     axs[row_index,col_index].set_xlim(0,14)
     axs[row_index,col_index].set_ylim(y_lims[i,:])
     axs[row_index,col_index].set_xticks(np.arange(0,16,2))
-    axs[row_index,col_index].text(0.95,0.95,panel_labels[i],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
-    if i == 0:
-        axs[row_index,col_index].legend()
+    axs[row_index,col_index].text(0.05,0.95,panel_labels[i],fontsize=fsize,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
+    if i == 3:
+        axs[row_index,col_index].legend(loc='upper right')
 
 axs[row_index,col_index].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 
@@ -179,7 +176,7 @@ axs[row_index,col_index].set_ylabel('counts per bin')
 axs[row_index,col_index].set_xlim(0,14)
 axs[row_index,col_index].set_ylim(0,40)
 axs[row_index,col_index].set_xticks(np.arange(0,16,2))
-axs[row_index,col_index].text(0.95,0.95,panel_labels[i+1],fontsize=12,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
+axs[row_index,col_index].text(0.05,0.95,panel_labels[i+1],fontsize=fsize,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
     
 plt.tight_layout()
 

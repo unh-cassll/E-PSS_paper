@@ -17,6 +17,7 @@ from sklearn.metrics import mean_squared_error
 from scipy import stats
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
@@ -24,11 +25,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81;
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
 panel_labels = ['(a)','(b)']
 
@@ -208,7 +204,7 @@ bin_95CI = 1.96*bin_std/bin_counts
 bin_upper = bin_means + bin_95CI
 bin_lower = bin_means - bin_95CI
 
-fig = plt.figure(figsize=(6,6))
+fig = plt.figure(figsize=(fullwidth/2,fullwidth/2))
 plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
 plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
 plt.plot([0,16],[0,0],'--',color='gray')
@@ -248,7 +244,7 @@ run_ind = 162
 spread_ADCP = SPREAD_ADCP[run_ind,:]
 spread_EPSS = SPREAD_EPSS[run_ind,:]
 
-fig,axs = plt.subplots(1,2,figsize=(12,5))
+fig,axs = plt.subplots(1,2,figsize=(fullwidth,fullwidth*0.4))
 axs[0].plot(F_ADCP["frequency"],spread_ADCP,label="ADCP",linewidth=2)
 axs[0].plot(F_EPSS["frequency"],spread_EPSS,label="E-PSS",linewidth=2)
 axs[0].plot(f_Hz[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90])
@@ -258,8 +254,7 @@ axs[0].set_ylim(0,90)
 axs[0].set_xlim(1e-2,1e0)
 axs[0].set_xlabel('f [Hz]')
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$\circ$]')
-axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.8,82.5,r'$f_E$',color=color_list[2])
-axs[0].legend()
+axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.75,82.5,r'$f_E$',color=color_list[2])
 
 axs[0].grid(which='major', linestyle='-', linewidth=0.75)  # Major gridlines with solid linestyle
 axs[0].grid(which='minor', linestyle=':', linewidth=0.75)  # Minor gridlines with dotted linestyle
@@ -286,10 +281,11 @@ axs[1].set_ylim(0,90)
 axs[1].set_xlim(0,14)
 axs[1].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_E$ [$\circ$]')
+axs[1].legend()
 
 for n in np.arange(2):
     
-    axs[n].text(0.05,0.95,panel_labels[n],fontsize=12,ha='center',va='center',transform=axs[n].transAxes)
+    axs[n].text(0.05,0.95,panel_labels[n],fontsize=fsize,ha='center',va='center',transform=axs[n].transAxes)
     
 plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
 

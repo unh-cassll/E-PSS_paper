@@ -13,16 +13,12 @@ import seaborn as sns
 import netCDF4 as nc
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
 path = '../_data/'
 
@@ -70,7 +66,7 @@ dU_string = dU.astype(str)
 
 slope_PDF_binned = np.nan*np.ones((len(U_centers),200,3,2))
 
-dolp_gain_choices = ['no gain','lab gain','empirical gain']
+dolp_gain_choices = ['no gain','lab gain','emp. gain']
 
 for i in np.arange(len(U_centers)):
     
@@ -79,7 +75,7 @@ for i in np.arange(len(U_centers)):
 
 counter = 0
 
-fig, axs = plt.subplots(len(U_centers), 2, sharex=True, sharey=True, figsize=(12, 13))
+fig, axs = plt.subplots(len(U_centers), 2, sharex=True, sharey=True, figsize=(fullwidth, fullwidth*1.2))
 
 for j in np.arange(len(U_centers)):
     
@@ -91,19 +87,19 @@ for j in np.arange(len(U_centers)):
         axs[j,1].plot(slope_centers,slope_PDF_binned[j,:,k,1],color=color_list[k],label=dolp_gain_choices[k],linewidth=2)
     
     wind_string = U_low_string[j] + ' < U ≤ ' + U_high_string[j]
-    axs[j, 1].text(-0.47,33, wind_string,
-             fontsize=12,
+    axs[j, 1].text(-0.45,25, wind_string,
+             fontsize=fsize,
              color='black',
              bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
     
-    axs[j, 0].plot(wave_slope_PDF['slope_up'],wave_slope_PDF.integrate('slope_cross'),'--',linewidth=2,color='black',label=r'Bréon & Henriot [2006]')
+    axs[j, 0].plot(wave_slope_PDF['slope_up'],wave_slope_PDF.integrate('slope_cross'),'--',linewidth=2,color='black',label='B & H [2006]')
     axs[j, 0].set_ylabel('P(slope)')
     
     axs[j, 1].plot(wave_slope_PDF['slope_cross'],wave_slope_PDF.integrate('slope_up'),'--',linewidth=2,color='black')
 
     for l in np.arange(2):
         
-        axs[j,l].text(0.95,0.95,panel_labels[counter],fontsize=12,ha='center',va='center',transform=axs[j,l].transAxes)
+        axs[j,l].text(0.95,0.95,panel_labels[counter],fontsize=fsize,ha='center',va='center',transform=axs[j,l].transAxes)
         counter = counter + 1
         
     plt.xlim(-0.5,0.5)
@@ -114,7 +110,7 @@ for j in np.arange(len(U_centers)):
 axs[len(U_centers)-1,0].set_xlabel('upwind slope')
 axs[len(U_centers)-1,1].set_xlabel('crosswind slope')
 
-axs[0,0].legend(loc='upper left')
+axs[2,0].legend(loc='upper left')
 
 plt.tight_layout()
 

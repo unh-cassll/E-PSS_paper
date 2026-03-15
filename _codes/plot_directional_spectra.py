@@ -13,6 +13,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
@@ -20,11 +21,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81;
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
 path = '../_data/'
 
@@ -128,7 +124,7 @@ D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum
 
 vmin, vmax = -3.5,-1.5
 axes_kw={"rmax": 0.6, "rstep": 0.1, "as_period": False}
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,12/2), layout="constrained")
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth/2), layout="constrained")
 plot_directional_spectrum(
     np.log10(F_ADCP), ax=ax1, levels=None, colorbar=False,
     axes_kw=axes_kw, vmin=vmin, vmax=vmax,
@@ -162,7 +158,7 @@ if winddir_plot > 180:
 
 Dlims = [0,0.012]
 
-fig, (ax0, ax1, cax) = plt.subplots(ncols=3, figsize=(12, 5),gridspec_kw={"width_ratios":[1,1, 0.05]})
+fig, (ax0, ax1, cax) = plt.subplots(ncols=3, figsize=(fullwidth, fullwidth*0.4),gridspec_kw={"width_ratios":[1,1, 0.05]})
 
 inds_keep = f_Hz_ADCP < f_cut_high
 inds_keep_MEM = D_EPSS["frequency"].data < f_cut_high
@@ -177,9 +173,9 @@ ax0.set_xlim(-180,180)
 ax0.set_ylim(1e-2,2e1)
 ax0.set_xlabel(r'$\theta$ [$\circ$]')
 ax0.set_ylabel('f [Hz]')
-ax0.text(0.04,0.93,'(a)',color='white',fontsize=12,ha='center',va='center',transform=ax0.transAxes)
+ax0.text(0.93,0.92,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax0.transAxes)
 ax0.text(-37, 2.2e-2, 'MEM, ADCP',
-         fontsize=12,
+         fontsize=fsize,
          color='black',
          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
 
@@ -192,9 +188,9 @@ ax1.set_xlim(-180,180)
 ax1.set_ylim(1e-2,2e1)
 ax1.set_xlabel(r'$\theta$ [$\circ$]')
 ax1.set_yticklabels([])
-ax1.text(0.04,0.93,'(b)',color='white',fontsize=12,ha='center',va='center',transform=ax1.transAxes)
+ax1.text(0.93,0.92,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
 ax1.text(-40, 2.2e-2, 'MEM, E-PSS',
-         fontsize=12,
+         fontsize=fsize,
          color='black',
          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
 

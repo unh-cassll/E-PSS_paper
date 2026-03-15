@@ -10,16 +10,14 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
 import seaborn as sns
-sns.set_theme(style="whitegrid")
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 n = 1.33
 
@@ -61,7 +59,7 @@ for dolp_ind in np.arange(0,num_DOLP):
 DOLP_both[:,:,0] = DOLP_upwelling
 DOLP_both[:,:,1] = DOLP_downwelling
 
-fig, axs = plt.subplots(1, 2, figsize=(12, 6), sharey='all')
+fig, axs = plt.subplots(1, 2, figsize=(fullwidth, fullwidth/2), sharey='all')
 
 colormaps = ['cividis', 'magma']
 color_mins = [0,0]
@@ -76,7 +74,7 @@ ylims = [0,1.1]
 
 panel_labels = ['(a)','(b)','(c)','(d)']
 text_x = 0.01
-text_y = 0.95
+text_y = 0.93
 
 for i, ax in enumerate(axs):
     

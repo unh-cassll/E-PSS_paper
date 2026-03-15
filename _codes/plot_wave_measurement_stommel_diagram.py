@@ -9,12 +9,13 @@ import numpy as np
 
 import seaborn as sns
 
+from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
+
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
 
 g = 9.81
 sigma = 0.072
@@ -25,7 +26,7 @@ omega = np.sqrt(g*k+sigma/rho*k**3)
 x = 2*np.pi/k
 y = 2*np.pi/omega
 
-fig = plt.figure(figsize=(6, 4.25))
+fig = plt.figure(figsize=(fullwidth/2, fullwidth*3/8))
 
 ax = fig.add_axes([0.1, 0.1, 0.7, 0.8])
 plt.loglog(x, y, color='k')
@@ -45,7 +46,7 @@ rectangles = [
 for (x_pos, y_pos, width, height), color, method in zip(rectangles,colors,methods):
     rect = plt.Rectangle((x_pos, y_pos), width, height, color=color, alpha=0.25)
     plt.gca().add_patch(rect)
-    plt.text(x_pos+width*0.85,y_pos*1.15,method,color=color,horizontalalignment='right')
+    plt.text(x_pos,y_pos+height*0.6,method,color=color,horizontalalignment='left')
 
 # plt.text(30,40,'gravity-capillary linear dispersion',horizontalalignment='right')
 
@@ -64,7 +65,7 @@ line_ax.axis('off')
 
 line_ax.loglog([1, 1], [1.5, 80], color=colors[4], linewidth=3)
 
-line_ax.text(3, 10, 'buoys, gauges', fontsize=12, rotation=90, color=colors[4], va='center', ha='left')
+line_ax.text(3, 10, 'buoys, gauges', fontsize=fsize, rotation=90, color=colors[4], va='center', ha='left')
 
 line_ax.annotate('', xy=(1, 100), xytext=(1, 11), 
                  arrowprops=dict(arrowstyle='->', color=colors[4], lw=3))

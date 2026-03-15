@@ -14,16 +14,12 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
 from subroutines.utils import *
+color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
-
-sns.set_theme(style="whitegrid",palette="deep",font="DejaVu Sans Mono")
-
-# Set custom property cycle colors
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611'])
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
@@ -131,10 +127,10 @@ f_sat_lims = [4e-1,1.5e0]
 k_eq_lims = [2e-1,1.5e0]
 k_sat_lims = [5e-1,1.5e1]
 
-lw_thick = 3.5
-lw_thin = 2.5
+lw_thick = 2.5
+lw_thin = 1.5
 
-fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+fig, axs = plt.subplots(2, 2, figsize=(fullwidth, fullwidth))
 
 for i in np.arange(len(U_centers)):
     
@@ -202,6 +198,12 @@ for i in np.arange(len(U_centers)):
 axs[1,0].set_xlabel('f [Hz]')
 axs[1,1].set_xlabel(r'k [rad m$^{-1}$]')
 
+# Stick ticklabels/axis labels of right two subplots on right side of figure
+axs[0,1].yaxis.set_label_position("right")
+axs[0,1].yaxis.tick_right()
+axs[1,1].yaxis.set_label_position("right")
+axs[1,1].yaxis.tick_right()
+
 counter = 0
     
 for i in np.arange(2):
@@ -209,7 +211,7 @@ for i in np.arange(2):
         axs[i,j].grid(which='major', linestyle='-', linewidth=0.75)  # Major gridlines with solid linestyle
         axs[i,j].grid(which='minor', linestyle=':', linewidth=0.75)  # Minor gridlines with dotted linestyle
         
-        axs[i,j].text(0.05,0.95,panel_labels[counter],fontsize=12,ha='center',va='center',transform=axs[i,j].transAxes)
+        axs[i,j].text(0.05,0.95,panel_labels[counter],fontsize=fsize,ha='center',va='center',transform=axs[i,j].transAxes)
         counter = counter + 1
 
 plt.tight_layout()
