@@ -1,1 +1,16 @@
+# Ignore the Python cache
 __pycache__/
+
+# Ignore LaTex outputs in the main directory
+*.aux
+*.bbl
+*.blg
+*.log
+*.pdf
+
+# Ignore specific file types in the figs/ folder
+_figures/*.pdf
+
+# Ignore .nc files in the _data/ folder
+_data/*.nc
+
