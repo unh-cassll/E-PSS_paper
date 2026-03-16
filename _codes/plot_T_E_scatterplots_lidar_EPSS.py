@@ -46,7 +46,7 @@ T_E_lab_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,ax
 T_E_emp_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0))
 T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0))
 
-inds_exclude = (T_E_lidar > 20) | (T_E_lidar < 4.5) | (Hm0_emp_gain < 0.1)
+inds_exclude = (T_E_lidar > 10.5) | (T_E_lidar < 4.5) | (Hm0_emp_gain < 0.1)
 T_E_lidar[inds_exclude] = np.nan
 
 data_size = len(T_E_lidar)
@@ -106,8 +106,8 @@ offset_line = 'bias'
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((3.1, 8.2), 4.5, 1.7, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((3.1, 8.2), 4.5, 1.7, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((4.1, 9.1), 4.4, 1.8, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((4.1, 9.1), 4.4, 1.8, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 # Add the textbox to the plot
 x_position = 0.02  # Starting x position for the text
@@ -138,18 +138,20 @@ for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_va
     plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
 
-x_position += 0.13  # Move over
+x_position += 0.11  # Move over
 plt.text(x_position, y_position-0.049, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
 plt.text(x_position, y_position-0.147, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
     
-plt.xticks(np.linspace(3,11,9))
-plt.yticks(np.linspace(3,11,9))
-plt.xlim(3,10)
-plt.ylim(3,10)
+plt.xticks(np.linspace(4,12,9))
+plt.yticks(np.linspace(4,12,9))
+plt.xlim(4,11)
+plt.ylim(4,11)
 
 plt.xlabel(r'$T_{E}$, lidar [s]')
 plt.ylabel(r'$T_{E}$, E-PSS [s]')
+
+sns.despine(right=False,top=False)
 
 plt.savefig('../_figures/T_E_comparison_lidar_EPSS.pdf',bbox_inches='tight')

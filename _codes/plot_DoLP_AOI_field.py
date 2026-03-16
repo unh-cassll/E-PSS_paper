@@ -69,11 +69,11 @@ titles = ['overcast','cloudless']
 
 fig, axs = plt.subplots(2,1, sharex=True, sharey=False, figsize=(fullwidth/2, fullwidth))
 
-axs[0].plot(AoI_overcast,DoLP_overcast,linewidth=2,label='wide')
+axs[0].plot(AoI_overcast,DoLP_overcast,linewidth=4,label='wide')
 axs[0].plot(AoI_overcast_narrow,DoLP_overcast_narrow,'*',label='narrow')
 axs[0].plot(overcast_AoI,overcast_DoLP,'--',label='fit')
 
-axs[1].plot(AoI_sunny,DoLP_sunny,linewidth=2,label='wide')
+axs[1].plot(AoI_sunny,DoLP_sunny,linewidth=4,label='wide')
 axs[1].plot(AoI_sunny_narrow,DoLP_sunny_narrow,'*',label='narrow')
 axs[1].plot(sunny_AoI,sunny_DoLP,'--',label='fit')
 

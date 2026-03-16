@@ -73,8 +73,8 @@ Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 f_low_filt = 0.01
 f_high_filt = 1
 
-f_lp = 1/2
-f_hp = 1/10
+f_lp = 1
+f_hp = 1/20
 
 water_depth_m = 15
 
@@ -82,8 +82,8 @@ smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_low = 0.05
-f_cut_high = 0.3
+f_cut_low = 0.03
+f_cut_high = 0.4
 
 f_Hz_copy = f_Hz_omni.copy()
 f_Hz_copy[0] = np.nan
@@ -209,6 +209,7 @@ plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alp
 plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(0,14)
+plt.xticks(np.arange(0,16,2))
 plt.yticks(np.arange(-360,360,15))
 plt.ylim(-45,45)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
@@ -279,6 +280,7 @@ for n in np.arange(2):
 axs[1].set_yticks(np.arange(0,360,15))
 axs[1].set_ylim(0,90)
 axs[1].set_xlim(0,14)
+axs[1].set_xticks(np.arange(0,16,2))
 axs[1].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_E$ [$\circ$]')
 axs[1].legend()

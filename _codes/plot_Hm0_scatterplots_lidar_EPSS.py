@@ -34,7 +34,7 @@ df = np.median(np.diff(ds_omnispect['frequency'][:]))
 
 Hm0_lidar = 4*np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)*df)
 
-inds_exclude = Hm0_lidar < 0.1
+inds_exclude = (Hm0_lidar < 0.1) | (Hm0_lidar > 2.5)
 Hm0_lidar[inds_exclude] = np.nan
 
 Hm0_no_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
@@ -101,8 +101,8 @@ offset_line = 'bias'
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((0.05, 3.7), 3.5, 1.25, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((0.05, 3.7), 3.5, 1.25, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((0.05, 2.2), 2.0, 0.75, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((0.05, 2.2), 2.0, 0.75, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 # Add the textbox to the plot
 x_position = 0.02  # Starting x position for the text
@@ -133,17 +133,19 @@ for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_va
     plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
 
-x_position += 0.155  # Move over
+x_position += 0.12  # Move over
 plt.text(x_position, y_position-0.049, 'm', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
 plt.text(x_position, y_position-0.147, 'm', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
     
-plt.xticks(np.linspace(0,5,6))
-plt.yticks(np.linspace(0,5,6))
-plt.xlim(0,5)
-plt.ylim(0,5)
+plt.xticks(np.linspace(0,3,7))
+plt.yticks(np.linspace(0,3,7))
+plt.xlim(0,3)
+plt.ylim(0,3)
 plt.xlabel(r'$H_{m0}$, lidar [m]')
 plt.ylabel(r'$H_{m0}$, E-PSS [m]')
+
+sns.despine(right=False,top=False)
 
 plt.savefig('../_figures/Hm0_comparison_lidar_EPSS.pdf',bbox_inches='tight')
