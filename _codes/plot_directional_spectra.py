@@ -144,6 +144,9 @@ _ = ax2.set(xlabel="", ylabel="", title="MEM, E-PSS")
 ax1.grid(False)
 ax2.grid(False)
 
+ax1.text(0.05,0.95,'(a)',color='black',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
+ax2.text(0.05,0.95,'(b)',color='black',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
+
 plt.savefig('../_figures/directional_spectra_polar.pdf',bbox_inches='tight')
 
 # %%
@@ -158,48 +161,38 @@ if winddir_plot > 180:
 
 Dlims = [0,0.012]
 
-fig, (ax0, ax1, cax) = plt.subplots(ncols=3, figsize=(fullwidth, fullwidth*0.4),gridspec_kw={"width_ratios":[1,1, 0.05]})
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth*0.45), layout="constrained")
 
 inds_keep = f_Hz_ADCP < f_cut_high
 inds_keep_MEM = D_EPSS["frequency"].data < f_cut_high
 inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high*1.1
 
-pc0 = ax0.pcolormesh(theta_deg_ADCP,f_Hz_ADCP[inds_keep],D_ADCP[inds_keep,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
-ax0.pcolor(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
-ax0.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
-ax0.set_yscale('log')
-ax0.set_xticks(np.arange(-360,360,45))
-ax0.set_xlim(-180,180)
-ax0.set_ylim(1e-2,2e1)
-ax0.set_xlabel(r'$\theta$ [$\circ$]')
-ax0.set_ylabel('f [Hz]')
-ax0.text(0.93,0.92,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax0.transAxes)
-ax0.text(-37, 2.2e-2, 'MEM, ADCP',
-         fontsize=fsize,
-         color='black',
-         bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
-
-pc1 = ax1.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:]/2.0,vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
-ax1.pcolormesh(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+pc1 = ax1.pcolormesh(theta_deg_ADCP,f_Hz_ADCP[inds_keep],D_ADCP[inds_keep,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+ax1.pcolor(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax1.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
 ax1.set_yscale('log')
 ax1.set_xticks(np.arange(-360,360,45))
 ax1.set_xlim(-180,180)
 ax1.set_ylim(1e-2,2e1)
 ax1.set_xlabel(r'$\theta$ [$\circ$]')
-ax1.set_yticklabels([])
-ax1.text(0.93,0.92,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
-ax1.text(-40, 2.2e-2, 'MEM, E-PSS',
-         fontsize=fsize,
-         color='black',
-         bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
+ax1.set_ylabel('f [Hz]')
+ax1.text(0.93,0.90,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
+ax1.set(title="MEM, ADCP")
 
-plt.subplots_adjust(right=1.05)
+pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:]/2.0,vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+ax2.pcolormesh(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+ax2.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
+ax2.set_yscale('log')
+ax2.set_xticks(np.arange(-360,360,45))
+ax2.set_xlim(-180,180)
+ax2.set_ylim(1e-2,2e1)
+ax2.set_xlabel(r'$\theta$ [$\circ$]')
+ax2.set_yticklabels([])
+ax2.text(0.93,0.90,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
+ax2.set(title="MEM, E-PSS")
 
-cbar = fig.colorbar(pc1, cax=cax)
+cbar = fig.colorbar(pc2)
 cbar.set_label(r'$D(f,\theta)$')
-
-plt.tight_layout()
 
 plt.savefig('../_figures/directional_spectra_combined.pdf',bbox_inches='tight')
 
