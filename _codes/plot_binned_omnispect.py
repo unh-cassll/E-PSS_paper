@@ -155,8 +155,8 @@ for i in np.arange(len(U_centers)):
     # Frequency elevation spectra
     axs[0,0].loglog(f_Hz[f_inds], F_f_binned[i,f_inds].T, color=colors[i],linewidth=lw_thin)
     axs[0,0].loglog(f_Hz_slope[f_slope_inds], F_f_slope_disp_binned[i,f_slope_inds].T, color=colors[i],linewidth=lw_thin)
-    axs[0,0].loglog(f_eq_lims,1e-2*np.power(f_eq_lims,-4),'--',color='black')
-    axs[0,0].loglog(f_sat_lims,5e-3*np.power(f_sat_lims,-5),':',color='black')
+    axs[0,0].loglog(f_eq_lims,1e-2*np.power(f_eq_lims,-4),'--',color='black',linewidth=lw_thin)
+    axs[0,0].loglog(f_sat_lims,5e-3*np.power(f_sat_lims,-5),':',color='black',linewidth=lw_thick)
 
     axs[0,0].set_xlim(f_lims)
     axs[0,0].set_ylim(Ff_lims)
@@ -166,8 +166,8 @@ for i in np.arange(len(U_centers)):
     # Frequency saturation spectra
     axs[1,0].loglog(f_Hz[f_inds], B_f_binned[i,f_inds].T, color=colors[i],linewidth=lw_thin)
     axs[1,0].loglog(f_Hz_slope[f_slope_inds], B_f_slope_disp_binned[i,f_slope_inds].T, color=colors[i],linewidth=lw_thin)
-    axs[1,0].loglog(f_eq_lims,4e-2*np.power(f_eq_lims,1),'--',color='black')
-    axs[1,0].loglog(f_sat_lims,2e-2*np.power(f_sat_lims,0),':',color='black')
+    axs[1,0].loglog(f_eq_lims,4e-2*np.power(f_eq_lims,1),'--',color='black',linewidth=lw_thin)
+    axs[1,0].loglog(f_sat_lims,2e-2*np.power(f_sat_lims,0),':',color='black',linewidth=lw_thick)
 
     axs[1,0].set_xlim(f_lims)
     axs[1,0].set_ylim(Bf_lims)
@@ -176,8 +176,8 @@ for i in np.arange(len(U_centers)):
     # Wavenumber elevation spectra
     axs[0,1].loglog(k_rad_m_disp[k_inds],(F_k_disp_binned[i,k_inds]).T, color=colors[i],linewidth=lw_thin)
     axs[0,1].loglog(k_rad_m_slope,(k_vec**-2*S_k_binned[i,:]).T, color=colors[i],linewidth=lw_thin)
-    axs[0,1].loglog(k_eq_lims,5e-2*np.power(k_eq_lims,-2.5),'--',color='black')
-    axs[0,1].loglog(k_sat_lims,5e-2*np.power(k_sat_lims,-3),':',color='black')
+    axs[0,1].loglog(k_eq_lims,5e-2*np.power(k_eq_lims,-2.5),'--',color='black',linewidth=lw_thin)
+    axs[0,1].loglog(k_sat_lims,5e-2*np.power(k_sat_lims,-3),':',color='black',linewidth=lw_thick)
 
     axs[0,1].set_xlim(k_lims)
     axs[0,1].set_ylim(Fk_lims)
@@ -187,8 +187,8 @@ for i in np.arange(len(U_centers)):
     # Wavenumber saturation spectra
     axs[1,1].loglog(k_rad_m_disp[k_inds],(B_k_disp_binned[i,k_inds]).T, color=colors[i],linewidth=lw_thin)
     axs[1,1].loglog(k_rad_m_slope,(k_vec*S_k_binned[i,:]).T, color=colors[i],linewidth=lw_thin)
-    axs[1,1].loglog(k_eq_lims,2e-2*np.power(k_eq_lims,0.5),'--',color='black')
-    axs[1,1].loglog(k_sat_lims,2e-2*np.power(k_sat_lims,0),':',color='black')
+    axs[1,1].loglog(k_eq_lims,2e-2*np.power(k_eq_lims,0.5),'--',color='black',linewidth=lw_thin)
+    axs[1,1].loglog(k_sat_lims,2e-2*np.power(k_sat_lims,0),':',color='black',linewidth=lw_thick)
 
     axs[1,1].set_xlim(k_lims)
     axs[1,1].set_ylim(Bk_lims)

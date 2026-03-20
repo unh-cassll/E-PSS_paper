@@ -115,7 +115,7 @@ f_Hz, Pxx_den_no = signal.welch(elev_m_no, sampling_rate_PSS, nperseg=nperseg)
 f_Hz, Pxx_den_lab = signal.welch(elev_m_lab, sampling_rate_PSS, nperseg=nperseg)
 f_Hz, Pxx_den_emp = signal.welch(elev_m_emp, sampling_rate_PSS, nperseg=nperseg)
 
-fig = plt.figure(figsize=(fullwidth/2,fullwidth*0.9))
+fig = plt.figure(figsize=(fullwidth/2,fullwidth*0.65))
 
 plt.plot(f_Hz_lidar[2:len(f_Hz_lidar)],Pxx_den_lidar[2:len(f_Hz_lidar)],color='black',linewidth=2,label="lidar")
 plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_no[2:len(f_Hz)],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
@@ -125,7 +125,7 @@ plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_emp[2:len(f_Hz)],color=color_list[2],linewidt
 plt.grid(which='major', linestyle='-', linewidth=0.75)
 plt.grid(which='minor', linestyle=':', linewidth=0.75)
 
-plt.xlim(1e-2,2e0)
+plt.xlim(1e-2,1e1)
 plt.ylim(5e-4,1e1)
 
 plt.xscale('log')
@@ -134,7 +134,7 @@ plt.yscale('log')
 plt.xlabel('f [Hz]')
 plt.ylabel(r'$F_{\eta\eta}(f)$ [m$^2$Hz$^{-1}$]')
 
-plt.legend(loc='upper left')
+plt.legend(loc='upper right')
 
 plt.savefig('../_figures/elevation_omnispect.pdf',bbox_inches='tight')
 

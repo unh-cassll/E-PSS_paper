@@ -2,7 +2,7 @@
 
 **A project in which we extend the Polarimetric Slope Sensing (PSS) technique for remotely observing ocean waves.**
 
-Manuscript in preparation for *Remote Sensing of Environment*:
+Manuscript submitted to *IEEE Transactions on Geoscience and Remote Sensing (TGRS)*:
 
 "E-PSS: the Extended Polarimetric Slope Sensing technique for measuring ocean surface waves"
 Nathan J. M. Laxague, Z. Göksu Duvarci, Christopher Bouillon, Lindsay Hogan, Junzhe Liu, and Christopher J. Zappa
