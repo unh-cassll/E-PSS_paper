@@ -28,8 +28,17 @@ Install Python, create a virtual environment, and install the dependencies:
 uv python install 3.12
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install -r requirements.txt
+make install
 ```
+
+`make install` adds `--refresh-package` flags so each install brings in
+GitHub HEAD of the two upstream packages we depend on (`ewdm` from
+`dspelaez/extended-wdm`, `epss` from `unh-cassll/polarimetric-slope-sensing`).
+**Do not run `uv pip install --force-reinstall epss` on its own** — that
+ignores `requirements.txt`, so uv resolves `ewdm` from PyPI (currently 0.4,
+which is missing the `np.trapz -> np.trapezoid` patch we rely on). To pull
+the latest of just those two upstream packages without re-resolving the
+rest of the environment, use `make update-deps`.
 
 Grab data from public repository:
 ```
