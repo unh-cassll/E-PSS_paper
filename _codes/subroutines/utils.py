@@ -1,7 +1,18 @@
 """
-Created on Wed Oct 15 13:01:03 2025
+Project-specific helpers for the E-PSS paper.
 
-@author: nathanlaxague
+Routines kept here have no direct upstream equivalent:
+    - figure_style                          paper plot styling
+    - mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
+    - compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier expansion
+    - fit_gram_charlier_slope_pdf           least-squares fit of the above
+    - slope_to_elev_wavelet                 1D wavelet inversion of slope -> eta
+    - trim_EPSS_dirspec                     +/-180 deg ambiguity resolution
+    - compute_mean_wave_direction_and_spreading
+    - plot_directional_spectrum and friends N-up polar variant
+
+Upstream entry points (lindisp_with_current, ewdm.Triplets, etc.) are
+imported directly in the scripts that need them.
 """
 
 import numpy as np
@@ -15,9 +26,18 @@ from typing import Union
 
 import scipy.signal as signal
 from scipy.optimize import minimize
-from scipy.signal import butter, filtfilt
 from scipy.signal import detrend
-from scipy import interpolate
+from scipy.signal.windows import tukey
+
+# Internal-only upstream imports (underscore-aliased so they do not leak
+# through `from subroutines.utils import *`).
+from eta_field_recon import lindisp_with_current as _lindisp_with_current
+from eta_field_recon.wavelet_core import (
+    _cwt as _ewdm_cwt,
+    _inverse_cwt as _ewdm_icwt,
+    krogstad_eta_coeffs as _krogstad_eta_coeffs,
+    skirt_correction as _skirt_correction,
+)
 
 # %%
 
@@ -29,11 +49,11 @@ def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
     lw = 1.0
 
     sns.set_context("paper", rc={
-        "axes.grid": True, 
-        "font.size": fsize,  
-        "axes.titlesize": title_fontsize, 
-        "axes.labelsize": label_fontsize, 
-        "xtick.labelsize": tick_fontsize, 
+        "axes.grid": True,
+        "font.size": fsize,
+        "axes.titlesize": title_fontsize,
+        "axes.labelsize": label_fontsize,
+        "xtick.labelsize": tick_fontsize,
         "ytick.labelsize": tick_fontsize,
         "grid.linewidth": lw,
         "xtick.major.width": lw,
@@ -44,7 +64,7 @@ def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
 
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
     plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
-    
+
     plt.rcParams.update({
         'axes.grid': True,
         'font.size': fsize,
@@ -57,11 +77,11 @@ def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
         'xtick.major.width': lw,
         'ytick.major.width': lw,
     })
-    
+
     # Full page figure size (assuming letter paper with 0.5 inch margins
     fullwidth = 7.5
     fullheight = 10
-	
+
     return color_list, fullwidth, fullheight, fsize
 
 # %%
@@ -75,48 +95,48 @@ def mueller_calc_full(n,Ssky,Sup):
 
     theta_i = np.linspace(0,np.pi/2,10000)
     theta_t = np.asin(np.sin(theta_i)/n)
-    
+
     # Mueller matrix element equations, KA89
     # taken from Eq. 3 of Z08
     alpha = 1/2*(np.tan(theta_i-theta_t)/np.tan(theta_i+theta_t))**2;
     eta = 1/2*(np.sin(theta_i-theta_t)/np.sin(theta_i+theta_t))**2;
-    
+
     alpha_prime = 1/2*(2*np.sin(theta_t)*np.sin(theta_i)/(np.sin(theta_i+theta_t)*np.cos(theta_i-theta_t)))**2;
     eta_prime = 1/2*(2*np.sin(theta_t)*np.sin(theta_i)/np.sin(theta_t+theta_i))**2;
-    
+
     gamma_Re = (np.tan(theta_i-theta_t)*np.sin(theta_i-theta_t))/(np.tan(theta_i+theta_t)*np.sin(theta_i+theta_t));
     gamma_Re_prime = 4*(np.sin(theta_t)**2*np.sin(theta_i)**2)/(np.sin(theta_t+theta_i)**2*np.cos(theta_t-theta_i)**2);
-    
+
     # Stokes parameter components, reflected and transmitted radiance
     # taken from Eq. 4 of Z08
     S0_Re = Ssky[0]*(alpha+eta) + Ssky[1]*(alpha-eta);
     S1_Re = Ssky[0]*(alpha-eta) + Ssky[1]*(alpha+eta);
     S2_Re = Ssky[2]*gamma_Re;
     S3_Re = Ssky[3]*gamma_Re;
-    
+
     S0_Tr = Sup[0]*(alpha_prime+eta_prime) + Sup[1]*(alpha_prime-eta_prime);
     S1_Tr = Sup[0]*(alpha_prime-eta_prime) + Sup[1]*(alpha_prime+eta_prime);
     S2_Tr = Sup[2]*gamma_Re_prime;
     S3_Tr = Sup[3]*gamma_Re_prime;
-    
+
     S0 = S0_Re + S0_Tr;
     S1 = S1_Re + S1_Tr;
     S2 = S2_Re + S2_Tr;
     S3 = S3_Re + S3_Tr;
-    
+
     # DOLP calculation
     DoLP = np.sqrt(S1**2+S2**2+S3**2)/S0;
     DoLP[0] = DoLP[1] - (DoLP[2]-DoLP[1]);
-    
+
     # Assign output
     out_theta = 180/np.pi*theta_i;
     out_DOLP = DoLP;
-    
+
     return(out_theta,out_DOLP)
 
 # %%
 
-# Given ten-meter wind speed in m/s, returns wave slope 
+# Given ten-meter wind speed in m/s, returns wave slope
 # joint probability density function and upwind/crosswind mean square slope
 
 # Procedure following Cox & Munk [1954]
@@ -124,18 +144,18 @@ def mueller_calc_full(n,Ssky,Sup):
 # N. Laxague 2023-2025
 
 def compute_gram_charlier_slope_pdf(U10_m_s):
-    
+
     slope_centers = np.linspace(-1,1,num=200)
-    
+
     mss_up = 1e-3 + 3.16*1e-3*U10_m_s
     mss_cross = 3*1e-3 + 1.85*1e-3*U10_m_s
-    
+
     c21 = -9.1e-4*U10_m_s**2
     c03 = -0.45*(1+np.exp(7-U10_m_s))**-1
     c40 = 0.3
     c04 = 0.4
     c22 = 0.12
-    
+
     # Create meshgrid for xi and zeta (normalized cross and upwind mss)
     xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_cross), slope_centers / np.sqrt(mss_up))
 
@@ -148,7 +168,7 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
             1/24 * c04 * (zeta**4 - 6 * zeta**2 + 3) +
             1/4 * c22 * (xi**2 - 1) * (zeta**2 - 1)
         )
-    
+
     wave_slope_PDF = xr.DataArray(
         PDF_cross_along,
         coords = {
@@ -157,9 +177,9 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
             },
         dims = {'slope_cross','slope_up'}
         )
-    
+
     wave_slope_PDF['PDF_cross_along'] = wave_slope_PDF/wave_slope_PDF.integrate('slope_cross').integrate('slope_up')
-    
+
     return wave_slope_PDF, mss_cross, mss_up
 
 # %%
@@ -172,7 +192,7 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
 # N. Laxague 2023-2025
 
 def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
-    
+
     # Create meshgrid for xi and zeta
     xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_c), slope_centers / np.sqrt(mss_u))
 
@@ -195,7 +215,7 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
     # Minimize Least-Squares
     initial_guess = np.zeros(5)
     result = minimize(cost_function, initial_guess)
-    
+
     # Calculate fitted values and residuals
     P_fit = fit(result.x, xi, zeta)
     residuals = P_fit - P_slope_c_u
@@ -219,238 +239,117 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
     }
 
     return out_struc
-    
+
 # %%
 
-# Given wave radian frequency, water depth, and current speed, obtains celerity and group speed
-
+# Wavelet inversion of 1-D earth-referenced wave slope (s_east, s_north) to
+# water-surface elevation eta(t). This is the 1-D analogue of the eta_long(t)
+# computation inside eta_field_recon.reconstruct_eta_field: continuous wavelet
+# transform of each slope component, Krogstad signed projection onto the
+# elevation wavelet coefficients via the linear-dispersion wavenumber, and
+# inverse CWT. The 1-D path is not exposed as a top-level upstream entry point
+# but is composed here from the same wavelet_core primitives.
+#
 # N. Laxague 2026
 
-def lindisp_with_current(omega, h, current_m_s):
-    """
-    Linear dispersion relation with current
-    
-    Parameters:
-    -----------
-    omega : array-like
-        Angular frequency
-    h : array-like
-        Water depth
-    current_m_s : array-like
-        Current velocity
-    
-    Returns:
-    --------
-    c : array
-        Phase speed
-    cg : array
-        Group velocity
-    """
-    # Ensure inputs are column vectors
-    omega[omega == 0] = np.nan
-    omega = np.atleast_1d(omega).flatten()
-    h = np.atleast_1d(h).flatten()
-    current_m_s = np.atleast_1d(current_m_s).flatten()
-    
-    # Constants
-    g = 9.806  # gravitational acceleration
-    rho_w = 1020  # water density
-    sigma = 0.072  # surface tension
-    
-    # Wave number vector
-    k_vec = np.logspace(-4, 4, 100)
-    
-    # Dispersion relation with current
-    omega_disp = np.sqrt((g*k_vec + sigma/rho_w*k_vec**3) * np.tanh(k_vec*h)) + k_vec*current_m_s
-    
-    # Create interpolation function
-    k_from_omega = interpolate.interp1d(omega_disp, k_vec, kind='cubic')
-    
-    # Find wave number for given frequencies
-    k = k_from_omega(omega)
-    
-    # Phase speed
-    c = omega / k
-    
-    # Group velocity
-    cg = c/2 * (1 + (2*k*h) / np.sinh(2*k*h))
-    
-    return c, cg
-
-# %%
-
-# Fourier‑based conversion of surface‑wave slope to elevation.
-
-#     Parameters
-#     ----------
-#     slope_x, slope_y : array_like
-#         1‑D arrays of surface‑wave slope (m‑1) along x and y.
-#         Must have the same length.
-#     water_depth_m : float
-#         Water depth (m).  Use np.inf for deep water.
-#     dt : float
-#         Sampling interval (s).
-#     f_lp : float
-#         Low‑pass cut‑off frequency (Hz).  Energy above this is
-#         attenuated.
-#     f_hp : float
-#         High‑pass cut‑off frequency (Hz).  Energy below this is
-#         attenuated.
-
-#     Returns
-#     -------
-#     eta_slope : ndarray
-#         1‑D array of surface‑wave elevation (m), same length as
-#         the input time series.
-# 
-# N. Laxague 2025
-
-def slope_to_elev(
-    slope_x: np.ndarray,
-    slope_y: np.ndarray,
+def slope_to_elev_wavelet(
+    slope_east: np.ndarray,
+    slope_north: np.ndarray,
     water_depth_m: float,
-    dt: float,
-    f_lp: float,
-    f_hp: float,
+    fs_Hz: float,
+    fmin_Hz: float = 1/15,
+    fmax_Hz: float = None,
+    transition_octaves: float = 0.25,
+    tukey_alpha: float = 0.25,
+    per_scale: bool = True,
+    skirt_correct: bool = True,
 ) -> np.ndarray:
+    """1-D wavelet slope-to-elevation inversion (Krogstad signed projection).
 
-    slope_x = np.asarray(slope_x, dtype=float).reshape(-1)
-    slope_y = np.asarray(slope_y, dtype=float).reshape(-1)
+    Composes eta_field_recon's CWT and Krogstad-projection primitives. The
+    CWT grid is fixed at linspace(0.05, 2.0, 80) Hz to match the upstream
+    reconstruct_eta_field default. A smooth sigmoidal high-pass is applied
+    to the elevation wavelet coefficients before the inverse CWT to
+    suppress the low-frequency blow-up artifact: at the CWT's minimum-
+    frequency edge (0.05 Hz) deep-water k ~ 1e-2 rad/m, so the 1/k factor
+    on W_eta = i*proj/k amplifies tiny slope noise by ~100x; without a HP
+    this dominates the inversion. The default corner (1/15 Hz) matches the
+    Fourier-domain HP used in the legacy slope_to_elev. A low-pass cutoff
+    is not enabled by default: 1/k naturally attenuates HF content (1/k^2
+    in spectral density), so high-frequency noise contributes negligibly to
+    the recovered elevation.
 
-    if slope_x.size != slope_y.size:
-        raise ValueError("slope_x and slope_y must have the same length")
+    per_scale=True (default) uses the upstream per-frequency inverse-CWT
+    calibration (replaces the universal 1.4383 constant). skirt_correct=
+    True (default) applies the Krogstad 1/k(omega) skirt-reshaping
+    correction. Together these close most of the wavelet path's ~13-15%
+    amplitude under-shoot vs. clean monochromatic round-trips.
 
-    N = slope_x.size
+    Args:
+        slope_east, slope_north : (T,) earth-referenced slope time series
+        water_depth_m           : water depth (m)
+        fs_Hz                   : sampling frequency (Hz)
+        fmin_Hz, fmax_Hz        : -6 dB corners of the sigmoidal bandpass on
+                                  W_eta. Pass None on either to disable that
+                                  side of the bandpass.
+        transition_octaves      : width of each sigmoid transition in octaves.
+        tukey_alpha             : Tukey window cosine fraction applied before
+                                  the CWT to suppress edge ringing
 
-    # If N is odd → drop last sample so that N is even
-    if N % 2 == 1:
-        slope_x = slope_x[:-1]
-        slope_y = slope_y[:-1]
-        N = slope_x.size
+    Returns:
+        eta_m : (T,) reconstructed surface elevation (m)
+    """
+    sE = np.asarray(slope_east, dtype=float).reshape(-1)
+    sN = np.asarray(slope_north, dtype=float).reshape(-1)
+    if sE.size != sN.size:
+        raise ValueError("slope_east and slope_north must have the same length")
 
-    # Half‑length for the shifted frequency array
-    half_N = int(np.ceil(N / 2))
+    freqs = np.linspace(0.05, 2.0, 80)
 
-    # Define frequency vector
-    f = np.arange(-half_N, half_N, dtype=float) / (N * dt)
+    # Linear detrend (not just mean subtraction): the slope time series carries
+    # a static viewing-angle tilt and can also drift slowly, both of which
+    # would leak into the low-frequency end of the inversion and dominate the
+    # reconstructed eta via the 1/k amplification at small wavenumbers.
+    sE = detrend(sE, type="linear")
+    sN = detrend(sN, type="linear")
+    w = tukey(len(sE), alpha=tukey_alpha)
+    sE_w = sE * w
+    sN_w = sN * w
 
-    # Positive‑frequency part (k is defined only for ω ≥ 0)
-    f_pos = f[half_N:]            # length = half_N
-    C_m_s_disp, Cg_m_s_disp = lindisp_with_current(2*np.pi*f_pos,water_depth_m,0)
-    k_rad_m_disp = 2*np.pi*f_pos / C_m_s_disp
+    Wsx = _ewdm_cwt(sE_w, freqs=freqs, fs=fs_Hz).values
+    Wsy = _ewdm_cwt(sN_w, freqs=freqs, fs=fs_Hz).values
 
-    # Full wavenumber array (mirror symmetry)
-    k = np.concatenate([-k_rad_m_disp[::-1], k_rad_m_disp])
-    
-    # Remove linear trend
-    s_x = detrend(slope_x)
-    s_y = detrend(slope_y)
+    _, k_disp = _lindisp_with_current(2 * np.pi * freqs, water_depth_m, 0.0)
 
-    # Compute FFT and shift
-    S_x = np.fft.fftshift(np.fft.fft(s_x))
-    S_y = np.fft.fftshift(np.fft.fft(s_y))
-
-    # Convert slope to elevation in Fourier space
-    S_x = 1j * S_x / k
-    S_y = 1j * S_y / k
-
-    # Replace infinities / NaNs caused by k=0 with zero
-    S_x = np.where(np.isfinite(S_x), S_x, 0.0)
-    S_y = np.where(np.isfinite(S_y), S_y, 0.0)
-
-    # Produce bandpass filter
-    # Find first index where f >= f_lp (low‑pass cutoff)
-    ind_lp = np.argmax(f >= f_lp)
-    # Find last index where f <= f_hp (high‑pass cutoff)
-    ind_hp = np.argmax(f <= f_hp)
-    
-    ind_lp = np.searchsorted(f, f_lp, side="left")
-    ind_hp = np.searchsorted(f, f_hp, side="right") - 1
-
-    # Build filter in the *half* domain
-    inds = np.arange(1, half_N + 1, dtype=float)
-
-    highpass_filt = 1 / (1 + np.exp(-5 * (inds - ind_hp + half_N)))
-    lowpass_filt = 1 - 1 / (1 + np.exp(-5 * (inds - ind_lp + half_N)))
-
-    ind_mid = int(np.floor((ind_lp + ind_hp - len(f)) / 2))
-    bandpass_filt = np.concatenate(
-        (highpass_filt[: ind_mid], lowpass_filt[ind_mid:])
-    )
-    combined_filt = np.concatenate([bandpass_filt[::-1], bandpass_filt])
-
-    # Apply the filter
-    S_x *= combined_filt
-    S_y *= combined_filt
-
-    # Combine Fourier amplitudes and produce real water surface elevation timeseries
-    elev_combined_Fourier = S_x + S_y
-    eta_slope = np.real(np.fft.ifft(np.fft.ifftshift(elev_combined_Fourier)))
-
-    return eta_slope
-
-
-# %%
-
-# Given water surface elevation and two-component (earth-referenced) slope,
-# computes frequency-directional spectrum via Maximum Entropy Method (MEM)
-# technique
-
-# A cut-up of code written by N. Laxague 2025, with large chunks taken from the
-# E-WDM code base by D. Pelaez-Zapata
-
-def compute_dirspec_EPSS(elev_m,slope_east,slope_north,fs_Hz,lowcut,highcut,nfft,nperseg,smoothnum=3):
-
-    num_samples = len(elev_m)
-
-    t_s = np.linspace(0,num_samples/fs_Hz,num_samples)
-    
-    slope_east = bandpass_filter(slope_east,lowcut,highcut,fs_Hz)
-    slope_north = bandpass_filter(slope_north,lowcut,highcut,fs_Hz)
-    elev_m = bandpass_filter(elev_m,lowcut,highcut,fs_Hz)
-
-    # creating dataset (slope timeseries)
-    dataset = xr.Dataset(
-        data_vars = {
-            "eastward_slope": ("time", slope_east),
-            "northward_slope": ("time", slope_north),
-            "surface_elevation": ("time", elev_m)
-            },
-        coords = {"time": t_s},
-        attrs = {"sampling_rate": fs_Hz}
+    if skirt_correct:
+        skirt_gain = _skirt_correction(
+            freqs, fs_Hz, k_disp, len(sE),
+            per_scale=per_scale, temporal_alpha=tukey_alpha,
         )
+    else:
+        skirt_gain = None
+    W_eta, _, _ = _krogstad_eta_coeffs(Wsx, Wsy, k_disp, skirt_gain=skirt_gain)
 
-    csp = ClassicSpectralAnalysis(dataset, fs=dataset.sampling_rate, nfft=nfft, nperseg=nperseg)
+    # Smooth sigmoidal bandpass on the recovered elevation wavelet
+    # coefficients. Sigmoid is centered at fmin_Hz/fmax_Hz with a logistic
+    # half-width set by transition_octaves (so the same fractional taper
+    # applies in dB-per-octave terms across the grid).
+    bandpass = np.ones_like(freqs)
+    log2f = np.log2(freqs)
+    if fmin_Hz is not None:
+        bandpass *= 1.0 / (1.0 + np.exp(
+            -(log2f - np.log2(fmin_Hz)) / transition_octaves
+        ))
+    if fmax_Hz is not None:
+        bandpass *= 1.0 / (1.0 + np.exp(
+            (log2f - np.log2(fmax_Hz)) / transition_octaves
+        ))
+    W_eta = W_eta * bandpass[:, None]
 
-    # computing the cross-spectral matrix
-    Phi = csp.cross_spectral_matrix()
+    eta = _ewdm_icwt(W_eta, freqs=freqs, fs=fs_Hz, per_scale=per_scale)
 
-    # computing the directional moments, aka first-five Fourier coefficients
-    moments = csp.directional_moments(Phi)
+    return np.asarray(eta, dtype=float)
 
-    D_EPSS = mem_distribution(moments,smoothing=smoothnum)
-    D_EPSS.data = np.nan_to_num(D_EPSS.data,0)
-    
-    D_EPSS = D_EPSS/D_EPSS.integrate("frequency").integrate("direction")
-    
-    # compute the directional wave spectrum
-    F_EPSS = moments["a0"] * D_EPSS
-    
-    return F_EPSS
-
-    # Function to create a Butterworth bandpass filter
-def butter_bandpass(lowcut, highcut, fs, order=5):
-    nyquist = 0.5 * fs
-    low = lowcut / nyquist
-    high = highcut / nyquist
-    b, a = butter(order, [low, high], btype='band')
-    return b, a
-
-# Function to apply the bandpass filter
-def bandpass_filter(data, lowcut, highcut, fs, order=5):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = filtfilt(b, a, data)
-    return y
 
 # %%
 
@@ -462,14 +361,14 @@ def bandpass_filter(data, lowcut, highcut, fs, order=5):
 # N. Laxague 2025
 
 def trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum=3):
-    
+
     theta_halfwidth = 90
 
     f = F_EPSS["frequency"].data
     D = F_EPSS["direction"].data
     Ff_EPSS = F_EPSS.integrate("direction")
 
-    D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T    
+    D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T
 
     D_EPSS.data = np.nan_to_num(D_EPSS.data,0)
 
@@ -491,10 +390,10 @@ def trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum=3):
     d_ind_start = np.argmin(dir_diff)
 
     inds_base = np.arange(0,len(D))-np.int8(len(D)/2)
-    
+
     lower_ind_halfwidth = np.int8(len(D)/2-theta_halfwidth/5.0)
     upper_ind_halfwidth = np.int8(lower_ind_halfwidth+len(D)/2)
-    
+
     lower_ind_quarterwidth = np.int8(len(D)/2-theta_halfwidth/5.0/4)
     upper_ind_quarterwidth = np.int8(lower_ind_quarterwidth+theta_halfwidth/5.0/2)
 
@@ -511,15 +410,15 @@ def trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum=3):
     spect_mega_copy[f_ind_start,inds_exclude] = 0
 
     for i in np.arange(f_ind_start+1,f_ind_end):
-                
+
         inds_lower = direction_mega < direction_mega[inds_inside[lower_ind_quarterwidth]]
         inds_higher = direction_mega > direction_mega[inds_inside[upper_ind_quarterwidth]]
         inds_exclude = inds_lower | inds_higher
-        
+
         spect_slice = spect_mega_copy[i,:].copy()
         spect_slice[inds_exclude] = 0
         ind_p = np.argmax(spect_slice)
-        
+
         inds_inside = ind_p + inds_base
         inds_outside = inds_inside + 72
         inds_lower = direction_mega < direction_mega[inds_inside[lower_ind_halfwidth]]
@@ -550,40 +449,40 @@ def trim_EPSS_dirspec(F_EPSS,theta_halfwidth,fmin,fmax,smoothnum=3):
 # N. Laxague 2025
 
 def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnum=3):
-    
+
     F_dirspec.data = np.nan_to_num(F_dirspec.data,0)
     spec_energy_density = F_dirspec.data
-    
+
     wavedir = F_dirspec["direction"].copy()
     dtheta = np.median(np.diff(wavedir.data))
-    
+
     if 'frequency' in F_dirspec.coords:
-        
+
         fourier_scale = F_dirspec["frequency"].data
         fourier_scale_name = 'frequency'
-        
+
     if 'wavenumber' in F_dirspec.coords:
-        
+
         fourier_scale = F_dirspec["wavenumber"].data
         fourier_scale_name = 'wavenumber'
         spec_energy_density = spec_energy_density*np.reshape(fourier_scale,(1,len(wavedir)))
-            
+
     D_array = ((F_dirspec.T / F_dirspec.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T
     D_array.data = np.nan_to_num(D_array.data,0)
-    
+
     Dtheta = D_array.integrate("frequency")
     ind_p = np.argmax(Dtheta.data)
-    
+
     theta_super = np.concatenate((wavedir-360,wavedir,wavedir+360),axis=0)
     theta_rel = theta_super - wavedir.data[ind_p]
     D_array_super = np.concatenate((D_array.data,D_array.data,D_array.data),axis=1)
     F_array_super = np.concatenate((spec_energy_density,spec_energy_density,spec_energy_density),axis=1)
-    
+
     inds_keep = (theta_rel >= -180) & (theta_rel < 180)
     theta_rel = theta_rel[inds_keep]
     D_array_super = D_array_super[:,inds_keep]
     F_array_super = F_array_super[:,inds_keep]
-    
+
     D_array["direction"] = theta_rel
     D_array.data = D_array_super
 
@@ -606,142 +505,23 @@ def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnu
     sigma_theta_array = np.sqrt(np.sum(d_theta2_array*D_array_downwave.data,axis=1)*dtheta)
 
     sigma_theta_array[sigma_theta_array<1.0] = np.nan
-    
+
     spread = xr.DataArray(
         sigma_theta_array,
         name = 'sigma_theta',
         coords = {fourier_scale_name: fourier_scale},
         dims = fourier_scale_name,
-        attrs = {"units": 'degrees'},        
+        attrs = {"units": 'degrees'},
         )
 
     return MWD, spread
 
 # %%
-
-#
-# The following code has been taken from the E-WDM code base, written by
-# D. Peláez-Zapata
-#
-# %
-# Classic directional spectral analysis
-# -------------------------------------
-# The following class implements the conventional cross-spectral analysis
-# using Fourier transform. This class takes in a dataset containing eastward
-# and northward displacements along with the surface elevation data. The
-# input parameters are sampling frequency of the time series and number of
-# Fourier components for analysis.
-#
-# Considering the three time series, :math:`x(t)`, :math:`y(t)` and
-# :math:`z(t)` (We normally use :math:`\eta(t)` for the vertical but it is
-# changed here to :math:`z(t)` for simplicity and convenience), the
-# cross-spectral matrix is computed as:
-#
-# .. math:: \Phi(f) = \begin{bmatrix}
-#                        S_{xx} & S_{xy} & S_{xz} \\
-#                        S_{yx} & S_{yy} & S_{yz} \\
-#                        S_{zx} & S_{zy} & S_{zz}
-#                     \end{bmatrix}
-#
-# where :math:`S_{xy}(f)` is the Fourier cross-spectrum between
-# :math:`x(t)` and :math:`y(t)`, respectively.
-#
-# Each cross-spectrum can be written in terms of a real (co-spectrum)
-# and an imaginary (quad-spectrum) component:
-#
-# .. math:: S_{xy}(f) = C_{xy} + i Q_{xy}
-#
-# The auto-spectrum is the cross-spectrum of the same signal, and can be
-# written as :math:`E_{xx}(f) = S_{xx} S_{xx}^*`, where :math:`*`
-# denotes a complex conjugate.
-#
-# For typical buoy recordings, e.g., three dimensional wave-induced
-# displacements, the circular moments can be written in terms of these auto-,
-# co-, and quad-spectra, like:
-#
-# .. math:: a_0 = S_{zz}(f)
-# .. math:: a_1 = \frac{Q_{xz}}{\sqrt{E_{zz} (E_{xx} + E_{yy})}}
-# .. math:: a_2 = \frac{Q_{yz}}{\sqrt{E_{zz} (E_{xx} + E_{yy})}}
-# .. math:: b_1 = \frac{E_{xx} - E_{yy}}{E_{xx} + E_{yy}}
-# .. math:: b_2 = \frac{2 C_{xy}}{E_{xx} + E_{yy}}
-#
-# See `Kuik et al. (1988)`_ and Appendix C in `Peláez-Zapata et al. (2024)`_ for further details.
-#
-# .. _Kuik et al. (1988): https://doi.org/10.1175/1520-0485(1988)018<1020:AMFTRA>2.0.CO;2
-# .. _Peláez-Zapata et al. (2024): https://theses.fr/2024UPASM004
-
-
-class ClassicSpectralAnalysis(object):
-    """This class implements the classic directional spectral analysis"""
-
-    def __init__(self, dataset: xr.Dataset, fs, nfft, nperseg):
-        self.dataset = dataset # time series
-        self.fs = fs # sampling frequency
-        self.nfft = nfft # number of fourier components
-        self.nperseg = nperseg # length of each segment
-
-    def cross_spectral_matrix(self) -> xr.Dataset:
-
-        # extract variables from dataset
-        x, y, z = (
-            self.dataset["northward_slope"],
-            self.dataset["eastward_slope"],
-            self.dataset["surface_elevation"]
-        )
-
-        # constants
-        fft_args = {
-            "fs": self.fs,
-            "detrend": "constant",
-            "nfft": min(self.nfft, len(self.dataset["time"])),
-            "nperseg": min(self.nperseg, len(self.dataset["time"]))
-        }
-
-        # auto-spectra
-        frq, Sxx = signal.welch(x, **fft_args)
-        frq, Syy = signal.welch(y, **fft_args)
-        frq, Szz = signal.welch(z, **fft_args)
-
-        # cross-spectra
-        frq, Sxz = signal.csd(x, z, **fft_args)
-        frq, Syz = signal.csd(y, z, **fft_args)
-        frq, Sxy = signal.csd(x, y, **fft_args)
-
-        return  xr.Dataset(
-            coords = {
-                "frequency": ("frequency", frq),
-            },
-            data_vars = {
-                "Sxx": ("frequency", Sxx),
-                "Syy": ("frequency", Syy),
-                "Szz": ("frequency", Szz),
-                "Sxz": ("frequency", Sxz),
-                "Syz": ("frequency", Syz),
-                "Sxy": ("frequency", Sxy),
-            }
-        )
-
-    def directional_moments(self, Phi: xr.Dataset) -> xr.Dataset:
-        Exx, Eyy, Ezz, Cxy, Qxz, Qyz = (
-            np.real(Phi["Sxx"]), np.real(Phi["Syy"]), np.real(Phi["Szz"]),
-            np.real(Phi["Sxy"]), np.imag(Phi["Sxz"]), np.imag(Phi["Syz"])
-        )
-
-        return  xr.Dataset(
-            {
-                "a0": Ezz,
-                "a1": Qxz / np.sqrt(Ezz * (Exx + Eyy)),
-                "b1": Qyz / np.sqrt(Ezz * (Exx + Eyy)),
-                "a2": (Exx - Eyy) / (Exx + Eyy),
-                "b2": 2 * Cxy / (Exx + Eyy)
-            }
-        )
-    
-# %%
-
-# The following code has been taken from the E-WDM code base, written by
-# D. Peláez-Zapata
-# Tweaked to modify some plotting details
+# N-up polar variant of the directional-spectrum plotter. The upstream
+# ewdm.plots.plot_directional_spectrum uses CCW-from-east convention (math);
+# this paper uses CW-from-North (compass) so the local copy swaps sin/cos to
+# put North at the top of the polar plot.
+# Adapted from D. Pelaez-Zapata's EWDM plotting helpers.
 
 # plot directional wave spectrum {{{
 def _smooth(E, ws=(5, 2)):
@@ -903,7 +683,7 @@ def _add_wind_info(ax, wspd, wdir, color="k", wind_sea_radius=True):
             linestyle="dashed", fill=False
         )
         ax.add_artist(circle)
-        
+
 def _add_current_info(ax, curspd, curdir, color="red", wind_sea_radius=True):
     """Add some info relative to wind speed"""
 
@@ -924,14 +704,6 @@ def _add_current_info(ax, curspd, curdir, color="red", wind_sea_radius=True):
         )
         ax.add_artist(circle)
 
-
-#def plot_directional_spectrum(
-#        da: xr.DataArray, frqs="frequency", dirs="direction", ax=None,
-#        smooth=None, cmap=None, levels=30, vmin=None, vmax=None, contours=None,
-#        colorbar=False, wspd=None, wdir=None, wind_sea_radius=None,
-#        curspd=None, curdir=None, cbar_kw={}, axes_kw={}
-#    ):
-#    """Make a simple plot of a direcitonal wave spectrum"""
 
 def plot_directional_spectrum(
         da: Union[xr.DataArray, np.ndarray],
@@ -1053,79 +825,10 @@ def plot_directional_spectrum(
             ax, wspd=wspd, wdir=wdir, color="k",
             wind_sea_radius=wind_sea_radius
         )
-        
+
     try:
         return fig, ax, pc
     except NameError:
         pc
 
 # }}}
-
-# %%
-
-# %
-# Maximum Entropy Method
-# ----------------------
-#
-# A more sophisticated way of obtaining the directional distribution
-# function :math:`D(f,\theta)` is by using a maximum entropy estimator.
-#
-# Following `Lygre and Krogstad (1983)`_ and `Alves and Melo (1999)`_,
-# the form of the directional distribution function can be written as:
-#
-# .. math:: D(f,\theta) = \frac{1}{2\pi} \left[
-#                   \frac{1 - \phi_1 c_1^* - \phi_2 c_2^*}
-#                        { |1 - \phi_1 e^{-i\theta} - \phi_2 e^{-i2\theta}|^2 }
-#               \right]
-#
-# where :math:`c_1` and :math:`c_2` are the complex representation of the
-# Fourier coefficients, i.e.,
-#
-# .. math:: c_1(f) = a_1(f) + i b_1(f)
-# .. math:: c_2(f) = a_2(f) + i b_2(f)
-#
-# and
-#
-# .. math:: \phi_1 = \frac{c_1 - c_2 c_1^*}{1 - |c_1|^2}
-# .. math:: \phi_2  = c_2 - c_1^* \phi_1
-#
-# It is worth noting that this is just one of the possible implementations
-# of MEM. There are other variations that might potentially produce better
-# results. For more details, see `Christie (2024)`_ and
-# `Simanesew et al. (2018)`_.
-#
-# .. _Lygre and Krogstad (1983): https://doi.org/10.1175/1520-0485(1986)016<2052:MEEOTD>2.0.CO;2
-# .. _Alves and Melo (1999): https://doi.org/10.1016/S0141-1187(99)00019-X
-# .. _Christie (2024): https://www.sciencedirect.com/science/article/pii/S0141118723003711?via%3Dihub
-# .. _Simanesew et al. (2018): https://doi.org/10.1175/JTECH-D-17-0007.1
-#
-
-def mem_distribution(moments, smoothing=32):
-    """Implementation of the Maximum Entropy Method"""
-
-    dirs =  xr.Variable(dims=("direction"), data=np.arange(-180,180,5))
-
-    c1 = moments["a1"] + 1j*moments["b1"]
-    c2 = moments["a2"] + 1j*moments["b2"]
-
-    phi1 = (c1 - c2 * c1.conj()) / (1 - np.abs(c1)**2)
-    phi2 = c2 - c1.conj() * phi1
-
-    sigma_e = 1 - phi1 * c1.conj() - phi2 * c2.conj()
-
-    D = (1/(2*np.pi)) * np.real(
-        sigma_e.expand_dims({"direction": dirs}) /
-        np.abs(
-            1 - phi1.expand_dims({"direction": dirs}) * np.exp(-1j*dirs*np.pi/180)
-              - phi2.expand_dims({"direction": dirs}) * np.exp(-2j*dirs*np.pi/180)
-        )**2
-    )
-    
-    D["direction"]=np.arange(-180,180,5)
-
-    return (
-        (D.T / D.integrate("direction"))
-        .rolling(frequency=smoothing, center=True)
-        .median()
-    )
-

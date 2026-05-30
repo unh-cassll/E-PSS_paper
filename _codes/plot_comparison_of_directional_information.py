@@ -16,7 +16,8 @@ from sklearn.metrics import mean_squared_error
 
 from scipy import stats
 
-from subroutines.utils import *
+from eta_field_recon import lindisp_with_current
+from subroutines.utils import figure_style, compute_mean_wave_direction_and_spreading
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -163,11 +164,8 @@ h_m_EPSS = 15
 omega_ADCP = 2*np.pi*Tm01_ADCP**-1
 omega_EPSS = 2*np.pi*Tm01_EPSS**-1
 
-C_m_s_disp_ADCP, Cg_m_s_disp_ADCP = lindisp_with_current(omega_ADCP,h_m_ADCP,0)
-k_rad_m_disp_ADCP = 2*np.pi*Tm01_ADCP**-1 / C_m_s_disp_ADCP
-
-C_m_s_disp_EPSS, Cg_m_s_disp_EPSS = lindisp_with_current(omega_EPSS,h_m_ADCP,0)
-k_rad_m_disp_EPSS = 2*np.pi*Tm01_EPSS**-1 / Cg_m_s_disp_EPSS
+C_m_s_disp_ADCP, _ = lindisp_with_current(omega_ADCP,h_m_ADCP,0)
+C_m_s_disp_EPSS, _ = lindisp_with_current(omega_EPSS,h_m_ADCP,0)
 
 # Account for wave refraction (coastline is approximately East-West, so MWD is already shore-relative)
 MWD_ADCP_shifted = np.asin(C_m_s_disp_EPSS/C_m_s_disp_ADCP*np.sin(MWD_ADCP*np.pi/180))*180/np.pi

@@ -49,8 +49,8 @@ else:
     
     COARE_Wdir_vec = np.reshape(ds_other["COARE_Wdir"][:],(190,1,1))
     
-    slope_north = np.nan*np.ones((190,18000,3))
-    slope_east = np.nan*np.ones((190,18000,3))
+    slope_north = np.nan*np.ones((190,6000,3))
+    slope_east = np.nan*np.ones((190,6000,3))
     
     slope_north[:,:,0] = ds_no["slope_north"][:]
     slope_north[:,:,1] = ds_lab["slope_north"][:]

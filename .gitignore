@@ -16,3 +16,7 @@ _figures/*.pdf
 # Ignore .nc files in the _data/ folder
 _data/*.nc
 
+# Ignore robot bits
+.venv
+.claude
+

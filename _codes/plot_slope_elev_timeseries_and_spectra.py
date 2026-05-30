@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
-from subroutines.utils import *
+from subroutines.utils import figure_style, slope_to_elev_wavelet
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -44,7 +44,7 @@ slope_north_emp = ds_emp['slope_north'][:]
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
-sampling_rate_PSS = np.float64(30)
+sampling_rate_PSS = np.float64(10)
 sampling_rate_lidar = np.float64(10)
 
 nperseg = 2048
@@ -52,7 +52,7 @@ nperseg = 2048
 run_ind = 141
 
 dt = 1/sampling_rate_PSS
-t = np.arange(0,600,dt)
+t = np.arange(slope_east_emp.shape[1]) * dt
 
 water_depth_m = 15.0
 f_lp = 1/2
@@ -62,19 +62,19 @@ sE = slope_east_no[run_ind,:]
 sN = slope_north_no[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_no = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
+elev_m_no = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
 
 sE = slope_east_lab[run_ind,:]
 sN = slope_north_lab[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_lab = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
+elev_m_lab = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
 
 sE = slope_east_emp[run_ind,:]
 sN = slope_north_emp[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_emp = slope_to_elev(sE,sN,water_depth_m,1/sampling_rate_PSS,f_lp,f_hp)
+elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
 
 slope_lim_val = 0.3
 
@@ -86,9 +86,13 @@ fig, ax1 = plt.subplots(figsize=(fullwidth, fullwidth/2))
 
 plt.xlim(0,20)
 
-# slope timeseries
-ax1.plot(t,slope_east_emp[run_ind,:], '--',linewidth=2, label='$s_E$', color='black')
-ax1.plot(t,slope_north_emp[run_ind,:], ':',linewidth=2, label='$s_N$', color='black')
+# Slope timeseries (demeaned: the raw series carry a fixed viewing-angle tilt
+# of ~0.1 rad on s_E and ~0.56 rad on s_N, which would push s_N off the plot
+# and is removed inside slope_to_elev_wavelet before the inversion anyway).
+sE_plot = slope_east_emp[run_ind,:] - np.mean(slope_east_emp[run_ind,:])
+sN_plot = slope_north_emp[run_ind,:] - np.mean(slope_north_emp[run_ind,:])
+ax1.plot(t,sE_plot, '--',linewidth=2, label='$s_E$', color='black')
+ax1.plot(t,sN_plot, ':',linewidth=2, label='$s_N$', color='black')
 ax1.set_ylabel('slope [rad]')
 ax1.tick_params(axis='y')
 ax1.set_xlabel('t [s]')

@@ -13,7 +13,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
-from subroutines.utils import *
+from eta_field_recon import lindisp_with_current
+from subroutines.utils import figure_style
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -85,11 +86,14 @@ T_s = f_Hz**-1
 T_s_slope = f_Hz_slope**-1
 h_m = 15
 
-C_m_s_disp, Cg_m_s_disp = lindisp_with_current(2*np.pi*f_Hz,h_m,0)
-k_rad_m_disp = 2*np.pi*f_Hz / C_m_s_disp
+# Upstream lindisp_with_current returns (phase_speed, wavenumber). Group
+# velocity is derived here from the gravity-only deep/intermediate water
+# form (surface tension contribution is negligible at these wavenumbers).
+C_m_s_disp, k_rad_m_disp = lindisp_with_current(2*np.pi*f_Hz,h_m,0)
+Cg_m_s_disp = C_m_s_disp/2 * (1 + (2*k_rad_m_disp*h_m) / np.sinh(2*k_rad_m_disp*h_m))
 
-C_m_s_slope_disp, Cg_m_s_slope_disp = lindisp_with_current(2*np.pi*f_Hz_slope,h_m,0)
-k_rad_m_slope_disp = 2*np.pi*f_Hz_slope / C_m_s_slope_disp
+C_m_s_slope_disp, k_rad_m_slope_disp = lindisp_with_current(2*np.pi*f_Hz_slope,h_m,0)
+Cg_m_s_slope_disp = C_m_s_slope_disp/2 * (1 + (2*k_rad_m_slope_disp*h_m) / np.sinh(2*k_rad_m_slope_disp*h_m))
 
 k_vec = np.reshape(k_rad_m_slope,(1,len(k_rad_m_slope)))
 k_slope_disp_vec = np.reshape(k_rad_m_slope_disp,(1,len(k_rad_m_slope_disp)))

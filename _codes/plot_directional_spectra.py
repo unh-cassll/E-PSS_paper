@@ -139,7 +139,7 @@ plot_directional_spectrum(
     curspd=U_sfc_mag_m_s[run_ind],curdir=U_sfc_dir_deg[run_ind]
 )
 _ = ax1.set(xlabel="", ylabel="", title="MEM, ADCP")
-_ = ax2.set(xlabel="", ylabel="", title="MEM, E-PSS")
+_ = ax2.set(xlabel="", ylabel="", title="EWDM, E-PSS")
 
 ax1.grid(False)
 ax2.grid(False)
@@ -189,7 +189,7 @@ ax2.set_ylim(1e-2,2e1)
 ax2.set_xlabel(r'$\theta$ [$\circ$]')
 ax2.set_yticklabels([])
 ax2.text(0.93,0.90,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
-ax2.set(title="MEM, E-PSS")
+ax2.set(title="EWDM, E-PSS")
 
 cbar = fig.colorbar(pc2)
 cbar.set_label(r'$D(f,\theta)$')
