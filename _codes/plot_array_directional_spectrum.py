@@ -45,12 +45,10 @@ def wmean_dir(E, ang_deg):
 # --- camera elevation field ---------------------------------------------------
 emp = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
 fld = nc.Dataset(path + 'ASIT2019_slope_fields_reduced.nc')
-_m = np.load(path + 'ASIT2019_aperture_mtf_gain.npz')
-mtf_curve = (_m['freqs_Hz'], _m['gain'])
 
 sE = np.where(np.isfinite(emp['slope_east'][run_ind]), emp['slope_east'][run_ind], 0.)
 sN = np.where(np.isfinite(emp['slope_north'][run_ind]), emp['slope_north'][run_ind], 0.)
-eta_long = slope_to_elev_wavelet(sE, sN, depth, fs, aperture_mtf_curve=mtf_curve)
+eta_long = slope_to_elev_wavelet(sE, sN, depth, fs)
 
 SxF = np.where(np.isfinite(fld['slope_east'][run_ind]), fld['slope_east'][run_ind], 0.).astype(float)
 SyF = np.where(np.isfinite(fld['slope_north'][run_ind]), fld['slope_north'][run_ind], 0.).astype(float)

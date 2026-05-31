@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from subroutines.utils import figure_style, slope_to_elev_wavelet, omni_complete_spectrum
+from pyGrad2Surf.g2s import g2s
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -58,30 +59,23 @@ f_lp = 1/2
 f_hp = 0.08   # gentle highpass corner on the elevation inversion (matches the
               # legacy FFT pipeline); suppresses the 1/k^2-amplified low-f drift
 
-# Empirical aperture-MTF curve (calibrated camera-only from the field's
-# center-vs-mean slope spectra by make_aperture_mtf_curve.py); deconvolves the
-# 0.3-0.7 Hz attenuation the footprint averaging imposes on the spatial-mean
-# slope. These demonstration plots use the long-wave wavelet inversion only.
-_mtf = np.load(path+'ASIT2019_aperture_mtf_gain.npz')
-mtf_curve = (_mtf['freqs_Hz'], _mtf['gain'])
-
 sE = slope_east_no[run_ind,:]
 sN = slope_north_no[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_no = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
+elev_m_no = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,fmin_Hz=f_hp)
 
 sE = slope_east_lab[run_ind,:]
 sN = slope_north_lab[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_lab = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
+elev_m_lab = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,fmin_Hz=f_hp)
 
 sE = slope_east_emp[run_ind,:]
 sN = slope_north_emp[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
+elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,fmin_Hz=f_hp)
 
 slope_lim_val = 0.3
 
@@ -124,38 +118,46 @@ plt.savefig('../_figures/wave_slope_elev_timeseries.pdf',bbox_inches='tight')
 
 # %%
 
-# E-PSS omnidirectional spectrum is the directionally-complete (S_sx+S_sy)/k^2
-# estimator (omni_complete_spectrum), one curve per gain treatment. It carries
-# the full directional spread (no single-direction projection loss), so it is
-# THE E-PSS omni product -- not a separate overlay. Same aperture-MTF gain^2 and
-# f_hp high-pass as the dataset (compute_all_omnidirectional_spectra.py). The
-# elevation timeseries panel above still uses the wavelet inversion (this
-# estimator is a frequency spectrum only).
 f_Hz_lidar, Pxx_den_lidar = signal.welch(elev_m_lidar[0,:,run_ind], sampling_rate_lidar, nperseg=nperseg)
-f_Hz, Pxx_den_no, _ = omni_complete_spectrum(slope_east_no[run_ind], slope_north_no[run_ind],
-    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
-_, Pxx_den_lab, _ = omni_complete_spectrum(slope_east_lab[run_ind], slope_north_lab[run_ind],
-    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
-_, Pxx_den_emp, _ = omni_complete_spectrum(slope_east_emp[run_ind], slope_north_emp[run_ind],
-    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
+f_Hz, Pxx_den_no = omni_complete_spectrum(slope_east_no[run_ind], slope_north_no[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg)
+f_Hz, Pxx_den_lab = omni_complete_spectrum(slope_east_lab[run_ind], slope_north_lab[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg)
+f_Hz, Pxx_den_emp = omni_complete_spectrum(slope_east_emp[run_ind], slope_north_emp[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg)
 
-# Start each curve at the first bin with f > 0.05 Hz (lidar and E-PSS are on
-# different Welch grids, so the start index is computed per grid).
-i_lid = int(np.argmax(f_Hz_lidar > 0.05))
-i_pss = int(np.argmax(f_Hz > 0.05))
+# 8x8 sub-aperture mean Krogstad (long wave) blended with the g2s short-wave field
+fld = nc.Dataset(path+'ASIT2019_slope_fields_reduced.nc')
+SxF = np.where(np.isfinite(fld['slope_east'][run_ind]), fld['slope_east'][run_ind], 0.0).astype(float)
+SyF = np.where(np.isfinite(fld['slope_north'][run_ind]), fld['slope_north'][run_ind], 0.0).astype(float)
+ny, nx, nt = SxF.shape; dxg = 2.915/nx; a = 8; i0 = (ny-a)//2
+eta8 = slope_to_elev_wavelet(SxF[i0:i0+a,i0:i0+a].mean((0,1)), SyF[i0:i0+a,i0:i0+a].mean((0,1)), water_depth_m, sampling_rate_PSS, fmin_Hz=f_hp)
+xg = np.arange(nx)*dxg
+Sx0 = SxF - SxF.mean((0,1),keepdims=True); Sy0 = SyF - SyF.mean((0,1),keepdims=True)
+Z = np.empty((ny,nx,nt))
+for i in range(nt): Z[:,:,i] = g2s(xg,xg,Sx0[:,:,i],Sy0[:,:,i])
+Z -= Z.mean((0,1),keepdims=True)
+fr = np.fft.rfftfreq(nt, 1/sampling_rate_PSS)
+Wlp = 1.0/(1.0+np.exp((np.log2(np.maximum(fr,1e-9))-np.log2(1.0))/0.25))
+L8 = np.fft.irfft(np.fft.rfft(eta8)*Wlp, nt)
+Zhp = np.fft.irfft(np.fft.rfft(Z,axis=2)*(1.0-Wlp)[None,None,:], nt, axis=2)
+eta_blend = (L8[None,None,:]+Zhp)[2:ny-2,2:nx-2].reshape(-1,nt)
+_, Pxx_den_blend = signal.welch(eta_blend, sampling_rate_PSS, nperseg=nperseg, axis=1)
+Pxx_den_blend = Pxx_den_blend.mean(0)
+
+i_lid = (f_Hz_lidar > 0.05) & (f_Hz_lidar < 1.0)
+i_pss = (f_Hz > 0.05) & (f_Hz < 1.0)
 
 fig = plt.figure(figsize=(fullwidth/2,fullwidth/2*4/3))
 
-plt.plot(f_Hz_lidar[i_lid:],Pxx_den_lidar[i_lid:],color='black',linewidth=2,label="lidar")
-plt.plot(f_Hz[i_pss:],Pxx_den_no[i_pss:],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
-plt.plot(f_Hz[i_pss:],Pxx_den_lab[i_pss:],color=color_list[1],linewidth=2,alpha=0.75,label="E-PSS, lab gain")
-plt.plot(f_Hz[i_pss:],Pxx_den_emp[i_pss:],color=color_list[2],linewidth=2,alpha=0.75,label="E-PSS, emp. gain")
+plt.plot(f_Hz_lidar[i_lid],Pxx_den_lidar[i_lid],color='black',linewidth=2,label="lidar")
+plt.plot(f_Hz[i_pss],Pxx_den_no[i_pss],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
+plt.plot(f_Hz[i_pss],Pxx_den_lab[i_pss],color=color_list[1],linewidth=2,alpha=0.75,label="E-PSS, lab gain")
+plt.plot(f_Hz[i_pss],Pxx_den_emp[i_pss],color=color_list[2],linewidth=2,alpha=0.75,label="E-PSS, emp. gain")
+plt.plot(f_Hz[i_pss],Pxx_den_blend[i_pss],':',color=color_list[2],linewidth=2,label="E-PSS, emp. gain [with short waves]")
 
 plt.grid(which='major', linestyle='-', linewidth=0.75)
 plt.grid(which='minor', linestyle=':', linewidth=0.75)
 
 plt.xlim(1e-2,1e1)
-plt.ylim(1e-4,1e0)
+plt.ylim(1e-6,1e0)
 
 plt.xscale('log')
 plt.yscale('log')

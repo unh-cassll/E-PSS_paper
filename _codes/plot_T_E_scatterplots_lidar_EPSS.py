@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 
 path = '../_data/'
 
-f_lp = 0.3
+f_lp = 0.4
 f_hp = 0.10   # excludes the 0.08-0.10 Hz band contaminated by 1/k^2-amplified
               # low-f slope drift (cannot be filtered camera-side; the 2.9 m
               # footprint can't separate it from swell).
@@ -39,20 +39,17 @@ df = np.median(np.diff(f_Hz))
 T_s = f_Hz.reshape(nf,1)**-1
 T_s[0] = 0
 
-# Energy-weighted mean period  T_E = m_{-1}/m_0 = sum(T E)/sum(E)  over [f_hp,f_lp].
-# The lidar reference is integrated from F_f_m2_Hz_lidar_passband -- the lidar
-# spectrum put through the SAME E-PSS high-pass passband -- so both sides feel
-# the identical low-f band shaping.
 Hm0_no_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
 Hm0_lab_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)*df))
 Hm0_emp_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)*df))
+Hm0_lidar = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)*df))
 
 T_E_no_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0))
 T_E_lab_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0))
 T_E_emp_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0))
-T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar_passband'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar_passband'][:].data,axis=0))
+T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0))
 
-inds_exclude = (T_E_lidar > 10) | (T_E_lidar < 4) | (Hm0_emp_gain < 0.2)
+inds_exclude = (T_E_lidar > 12) | (T_E_lidar < 4) | (Hm0_emp_gain < 0.2) | (Hm0_lidar < 0.2)
 T_E_lidar[inds_exclude] = np.nan
 
 data_size = len(T_E_lidar)
@@ -112,8 +109,8 @@ offset_line = 'bias'
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((4.1, 9.1), 4.4, 1.8, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((4.1, 9.1), 4.4, 1.8, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 # Add the textbox to the plot
 x_position = 0.02  # Starting x position for the text
@@ -152,8 +149,8 @@ plt.text(x_position, y_position-0.147, 's', color='k', transform=plt.gca().trans
     
 plt.xticks(np.linspace(4,12,9))
 plt.yticks(np.linspace(4,12,9))
-plt.xlim(4,11)
-plt.ylim(4,11)
+plt.xlim(4,9)
+plt.ylim(4,9)
 
 plt.xlabel(r'$T_{E}$, lidar [s]')
 plt.ylabel(r'$T_{E}$, E-PSS [s]')
