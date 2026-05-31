@@ -24,7 +24,9 @@ warnings.filterwarnings("ignore")
 path = '../_data/'
 
 f_lp = 0.3
-f_hp = 0.08
+f_hp = 0.10   # excludes the 0.08-0.10 Hz band contaminated by 1/k^2-amplified
+              # low-f slope drift (cannot be filtered camera-side; the 2.9 m
+              # footprint can't separate it from swell). Hm0 essentially unchanged.
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
     
@@ -32,9 +34,10 @@ mask = np.zeros((len(ds_omnispect['frequency']),1))
 mask[(ds_omnispect['frequency'][:]>f_hp)&(ds_omnispect['frequency'][:]<f_lp)] = 1
 df = np.median(np.diff(ds_omnispect['frequency'][:]))
 
-Hm0_lidar = 4*np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)*df)
+# lidar through the SAME E-PSS high-pass passband, for a like-for-like band.
+Hm0_lidar = 4*np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar_passband'][:].data,axis=0)*df)
 
-inds_exclude = (Hm0_lidar < 0.1) | (Hm0_lidar > 2.5)
+inds_exclude = (Hm0_lidar < 0.2) | (Hm0_lidar > 2.5)
 Hm0_lidar[inds_exclude] = np.nan
 
 Hm0_no_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))

@@ -24,10 +24,12 @@ warnings.filterwarnings("ignore")
 path = '../_data/'
 
 f_lp = 0.3
-f_hp = 0.08
+f_hp = 0.10   # excludes the 0.08-0.10 Hz band contaminated by 1/k^2-amplified
+              # low-f slope drift (cannot be filtered camera-side; the 2.9 m
+              # footprint can't separate it from swell).
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
-    
+
 f_Hz = ds_omnispect['frequency'][:].data
 nf = len(f_Hz)
 mask = np.ones((nf,1))
@@ -37,6 +39,10 @@ df = np.median(np.diff(f_Hz))
 T_s = f_Hz.reshape(nf,1)**-1
 T_s[0] = 0
 
+# Energy-weighted mean period  T_E = m_{-1}/m_0 = sum(T E)/sum(E)  over [f_hp,f_lp].
+# The lidar reference is integrated from F_f_m2_Hz_lidar_passband -- the lidar
+# spectrum put through the SAME E-PSS high-pass passband -- so both sides feel
+# the identical low-f band shaping.
 Hm0_no_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
 Hm0_lab_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)*df))
 Hm0_emp_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)*df))
@@ -44,9 +50,9 @@ Hm0_emp_gain = 4*np.sqrt((np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'
 T_E_no_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0))
 T_E_lab_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lab_gain'][:].data,axis=0))
 T_E_emp_gain = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data,axis=0))
-T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0))
+T_E_lidar = (np.nansum(mask*T_s*ds_omnispect['F_f_m2_Hz_lidar_passband'][:].data,axis=0)/np.nansum(mask*ds_omnispect['F_f_m2_Hz_lidar_passband'][:].data,axis=0))
 
-inds_exclude = (T_E_lidar > 10.5) | (T_E_lidar < 4.5) | (Hm0_emp_gain < 0.1)
+inds_exclude = (T_E_lidar > 10) | (T_E_lidar < 4) | (Hm0_emp_gain < 0.2)
 T_E_lidar[inds_exclude] = np.nan
 
 data_size = len(T_E_lidar)

@@ -27,8 +27,13 @@ warnings.filterwarnings("ignore")
 
 
 def _ewdm_dirs_to_cw_from_N(dirs_ccw_from_E):
-    """Convert EWDM's CCW-from-east bins to CW-from-North in [-180, 180)."""
-    cw = (90.0 - dirs_ccw_from_E + 540.0) % 360.0 - 180.0
+    """Convert EWDM's CCW-from-east bins to CW-from-North ("coming from", deg) in
+    [-180, 180). The +180 flips the slope-gradient direction that EWDM
+    Triplets(use='slopes') reports into the wave coming-from convention used by
+    the ADCP reference and the EWDM Arrays (displacement) method -- without it the
+    E-PSS directional spectrum is 180 deg reversed (e.g. run 116 peak reads ~150
+    deg instead of ~330, vs ADCP 339)."""
+    cw = (90.0 - dirs_ccw_from_E + 540.0 + 180.0) % 360.0 - 180.0
     order = np.argsort(cw)
     return cw[order], order
 
@@ -90,8 +95,10 @@ else:
         sE = np.where(np.isfinite(sE), sE, 0.0)
         sN = np.where(np.isfinite(sN), sN, 0.0)
 
+        # 0.08 Hz gentle high-pass on the elevation inference (sets eta_var,
+        # the directional-spectrum energy normalization below).
         elev_m = slope_to_elev_wavelet(
-            sE, sN, water_depth_m, sampling_rate_PSS,
+            sE, sN, water_depth_m, sampling_rate_PSS, fmin_Hz=0.08,
         )
         # slope_to_elev_wavelet may return one fewer sample if N is odd; pad
         # back to keep the time coord aligned with the raw slopes.

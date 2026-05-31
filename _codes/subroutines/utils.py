@@ -257,12 +257,22 @@ def slope_to_elev_wavelet(
     slope_north: np.ndarray,
     water_depth_m: float,
     fs_Hz: float,
-    fmin_Hz: float = 1/15,
+    fmin_Hz: float = 0.08,
     fmax_Hz: float = None,
     transition_octaves: float = 0.25,
     tukey_alpha: float = 0.25,
     per_scale: bool = True,
     skirt_correct: bool = True,
+    window_power_correct: bool = False,
+    aperture_mtf_m: float = None,
+    aperture_mtf_curve: tuple = None,
+    aperture_mtf_cap: float = 6.0,
+    lf_noise_suppress: bool = False,
+    lf_noise_band_Hz: tuple = (2.0, 4.5),
+    lf_noise_oversub: float = 1.0,
+    highpass_peak_fraction: float = None,
+    highpass_peak_floor_Hz: float = 0.08,
+    highpass_corner_floor_Hz: float = 0.06,
 ) -> np.ndarray:
     """1-D wavelet slope-to-elevation inversion (Krogstad signed projection).
 
@@ -273,8 +283,8 @@ def slope_to_elev_wavelet(
     suppress the low-frequency blow-up artifact: at the CWT's minimum-
     frequency edge (0.05 Hz) deep-water k ~ 1e-2 rad/m, so the 1/k factor
     on W_eta = i*proj/k amplifies tiny slope noise by ~100x; without a HP
-    this dominates the inversion. The default corner (1/15 Hz) matches the
-    Fourier-domain HP used in the legacy slope_to_elev. A low-pass cutoff
+    this dominates the inversion. The default corner (0.08 Hz) is the gentle
+    high-pass of the legacy FFT-based elevation pipeline. A low-pass cutoff
     is not enabled by default: 1/k naturally attenuates HF content (1/k^2
     in spectral density), so high-frequency noise contributes negligibly to
     the recovered elevation.
@@ -295,6 +305,97 @@ def slope_to_elev_wavelet(
         transition_octaves      : width of each sigmoid transition in octaves.
         tukey_alpha             : Tukey window cosine fraction applied before
                                   the CWT to suppress edge ringing
+        aperture_mtf_m          : if given, the footprint side length (m) over
+                                  which the input slope was spatially averaged.
+                                  The averaging is a sinc(k*L/2) aperture low-
+                                  pass that attenuates waves approaching the
+                                  footprint size (~0.3-0.7 Hz here). The returned
+                                  eta is deconvolved by 1/|sinc(k(f)*L/2)| up to
+                                  just below the first null (k*L/2 = pi, lambda =
+                                  footprint), recovering that band without the
+                                  noise a smaller physical aperture would inject.
+                                  Phase-preserving (a zero-phase spectral gain),
+                                  so it does not change cross-correlation lag/peak.
+                                  Above the null the spatial mean has no signal;
+                                  pair with the g2s short wave for f > ~0.7 Hz.
+        aperture_mtf_curve      : (freqs_Hz, gain) empirical deconvolution gain
+                                  from calibrate_aperture_mtf(). Preferred over
+                                  the analytic aperture_mtf_m sinc: the analytic
+                                  1-D sinc assumes axis-aligned waves and so
+                                  over-corrects a directionally-spread sea (the
+                                  measured aperture attenuates ~2x less near
+                                  0.6 Hz). The empirical curve reproduces the
+                                  aperture-free center-pixel inversion to ~1%.
+                                  Takes precedence over aperture_mtf_m if given.
+        aperture_mtf_cap        : max amplitude boost of the deconvolution (the
+                                  gain is clipped here near the null to avoid
+                                  amplifying noise; default 6).
+        lf_noise_suppress       : if True, apply a noise-aware (Wiener) low-
+                                  frequency rolloff. The slope->elevation step
+                                  divides by k, so the 1/k^2 factor blows up
+                                  white slope-measurement noise at low f (~12x
+                                  at 0.07 vs 0.18 Hz), overestimating the sub-
+                                  0.1 Hz spectrum and biasing T_E high for noisy
+                                  runs. This estimates the white slope noise
+                                  floor from the input slope at high f, propa-
+                                  gates it through this exact inversion (cached)
+                                  to get the elevation noise spectrum, and
+                                  spectral-subtracts it via a Wiener gain
+                                  G(f)=1-P_noise/P_eta. Phase-preserving; only
+                                  suppresses where the slope SNR is low (real
+                                  swell, where P_eta>>P_noise, is untouched).
+        lf_noise_band_Hz        : (lo, hi) high-frequency band over which the
+                                  white slope noise floor is estimated (median).
+        lf_noise_oversub        : spectral over-subtraction factor (1 = exact
+                                  Wiener; >1 suppresses more aggressively).
+        highpass_peak_fraction  : if set, place the highpass corner adaptively
+                                  at this fraction of the spectral peak fp
+                                  (corner = clip(fraction*fp, corner_floor, fmin_Hz
+                                  ... see below)), instead of a fixed corner. fp
+                                  is the peak of the slope-implied elevation
+                                  spectrum (PsE+PsN)/k^2 -- which IS the omni eta
+                                  spectrum, since PsE+PsN = k^2 S_eta -- searched
+                                  over [highpass_peak_floor_Hz, 0.40] (camera-
+                                  only). This targets the REAL low-f excess on the
+                                  averaged data: low-f spatially-coherent
+                                  contamination (platform / illumination drift,
+                                  NOT white noise -- that is averaged away over the
+                                  footprint) amplified by 1/k^2. A fixed steeper
+                                  corner over-corrects for long-period seas; tying
+                                  it to fp adapts to the sea state (~0.5 works; the
+                                  wind-wave spectrum has little real energy below
+                                  ~0.5-0.6 fp). Unlike the old max(fmin_Hz, .)
+                                  form, the corner is ALLOWED below fmin_Hz so a
+                                  long-period swell peak (e.g. 0.10 Hz) is not
+                                  clipped; it is only floored at the CWT-safe
+                                  highpass_corner_floor_Hz.
+        highpass_peak_floor_Hz  : lower edge of the fp peak search (default 0.08).
+                                  The 1/k^2 weighting makes (PsE+PsN)/k^2 blow up
+                                  at the lowest frequencies (the contamination
+                                  band), so without a floor the "peak" would lock
+                                  onto that artifact; this forbids picking a peak
+                                  below it. Only used when highpass_peak_fraction
+                                  is set.
+        highpass_corner_floor_Hz: absolute lower clamp on the adaptive corner
+                                  (default 0.06). The CWT grid starts at 0.05 Hz,
+                                  so a corner at/below it does no high-passing and
+                                  the 1/k 1/k^2 blow-up returns; this keeps the
+                                  corner just above the grid edge for low-peak
+                                  (long-swell) seas. Only used when
+                                  highpass_peak_fraction is set.
+        window_power_correct    : if True, divide the returned eta by
+                                  sqrt(mean(w^2)) of the Tukey window so that
+                                  the variance integrated over the FULL record
+                                  is unbiased. The internal taper otherwise
+                                  amplitude-attenuates the record ends, and a
+                                  downstream var()/Welch over the full record
+                                  inherits a ~mean(w^2) (~16% at alpha=0.25)
+                                  variance deficit. This is a single global
+                                  scalar; it makes the integrated variance
+                                  unbiased on average but does not restore the
+                                  per-sample edge amplitudes -- for per-sample
+                                  fidelity, restrict statistics to the
+                                  taper-free core via wavelet_eta_valid_slice().
 
     Returns:
         eta_m : (T,) reconstructed surface elevation (m)
@@ -312,6 +413,27 @@ def slope_to_elev_wavelet(
     # reconstructed eta via the 1/k amplification at small wavenumbers.
     sE = detrend(sE, type="linear")
     sN = detrend(sN, type="linear")
+
+    # Adaptive highpass corner: place it just below the spectral peak so the
+    # 1/k^2-amplified low-frequency contamination (platform/illumination drift,
+    # which survives footprint averaging) is suppressed without cutting real
+    # swell for long-period seas. fp from the slope-implied eta spectrum.
+    fmin_eff = fmin_Hz
+    if highpass_peak_fraction is not None and fmin_Hz is not None:
+        nps = int(min(512, len(sE)))
+        fW, PsE_ = signal.welch(sE, fs_Hz, nperseg=nps)
+        _, PsN_ = signal.welch(sN, fs_Hz, nperseg=nps)
+        _, kW = _lindisp_with_current(2 * np.pi * np.maximum(fW, 1e-6),
+                                      water_depth_m, 0.0)
+        kW = np.nan_to_num(np.asarray(kW, dtype=float), nan=np.inf, posinf=np.inf)
+        eta_ideal = (PsE_ + PsN_) / np.maximum(kW ** 2, 1e-12)
+        sel = (fW >= highpass_peak_floor_Hz) & (fW <= 0.40)
+        if sel.any():
+            fp = fW[sel][int(np.argmax(eta_ideal[sel]))]
+            # corner tied to fp; allowed below fmin_Hz (preserve long swell) but
+            # never below the CWT-edge safety floor (avoid 1/k^2 blow-up).
+            fmin_eff = max(highpass_corner_floor_Hz, highpass_peak_fraction * fp)
+
     w = tukey(len(sE), alpha=tukey_alpha)
     sE_w = sE * w
     sN_w = sN * w
@@ -338,7 +460,7 @@ def slope_to_elev_wavelet(
     log2f = np.log2(freqs)
     if fmin_Hz is not None:
         bandpass *= 1.0 / (1.0 + np.exp(
-            -(log2f - np.log2(fmin_Hz)) / transition_octaves
+            -(log2f - np.log2(fmin_eff)) / transition_octaves
         ))
     if fmax_Hz is not None:
         bandpass *= 1.0 / (1.0 + np.exp(
@@ -347,8 +469,410 @@ def slope_to_elev_wavelet(
     W_eta = W_eta * bandpass[:, None]
 
     eta = _ewdm_icwt(W_eta, freqs=freqs, fs=fs_Hz, per_scale=per_scale)
+    eta = np.asarray(eta, dtype=float)
 
-    return np.asarray(eta, dtype=float)
+    # Up-positive sign convention is handled upstream: eta_field_recon's
+    # krogstad_eta_coeffs uses W_eta = -i*proj/k (eta_hat = s_hat/(i*k)), fixed
+    # in epss commit 852ee94. No sign correction needed here.
+
+    if window_power_correct:
+        eta = eta / np.sqrt(np.mean(w ** 2))
+
+    if aperture_mtf_curve is not None:
+        cf, cg = aperture_mtf_curve
+        n = len(eta); F = np.fft.rfft(eta)
+        ff = np.fft.rfftfreq(n, d=1.0 / fs_Hz)
+        gain = np.interp(ff, np.asarray(cf, float), np.asarray(cg, float),
+                         left=1.0, right=1.0)
+        eta = np.fft.irfft(F * gain, n)
+    elif aperture_mtf_m is not None:
+        eta = _aperture_mtf_deconv(eta, fs_Hz, aperture_mtf_m,
+                                   water_depth_m, cap=aperture_mtf_cap)
+
+    if lf_noise_suppress:
+        n = len(eta)
+        nps = int(min(512, n))
+        # white slope noise floor (robust median over the high-f band)
+        fS, PsE = signal.welch(sE, fs_Hz, nperseg=nps)
+        _, PsN = signal.welch(sN, fs_Hz, nperseg=nps)
+        mb = (fS >= lf_noise_band_Hz[0]) & (fS <= lf_noise_band_Hz[1])
+        Ns = 0.5 * (np.median(PsE[mb]) + np.median(PsN[mb]))
+        # elevation-noise spectrum per unit slope-noise PSD, through THIS inversion
+        fT, T_noise = _lf_noise_transfer(
+            fs_Hz, n, water_depth_m, fmin_Hz, fmax_Hz, transition_octaves,
+            tukey_alpha, per_scale, skirt_correct, aperture_mtf_m,
+            aperture_mtf_curve, nps)
+        _, P_eta = signal.welch(eta, fs_Hz, nperseg=nps)
+        G = 1.0 - lf_noise_oversub * (Ns * T_noise) / np.maximum(P_eta, 1e-30)
+        G = np.clip(G, 0.0, 1.0)
+        G = np.convolve(G, np.ones(5) / 5, mode="same")
+        F = np.fft.rfft(eta); ff = np.fft.rfftfreq(n, d=1.0 / fs_Hz)
+        gain = np.sqrt(np.clip(np.interp(ff, fT, G, left=G[0], right=1.0), 0.0, 1.0))
+        eta = np.fft.irfft(F * gain, n)
+
+    return eta
+
+
+def highpass_squared(f_Hz: np.ndarray, corner_Hz: float,
+                     transition_octaves: float = 0.25) -> np.ndarray:
+    """Squared logistic high-pass transfer (power) with -6 dB corner at
+    corner_Hz; the same passband applied to the E-PSS omni spectrum, exposed so
+    the lidar reference can be subjected to the identical passband for fair
+    Hm0/T_E comparison."""
+    hp = 1.0 / (1.0 + np.exp(
+        -(np.log2(np.maximum(f_Hz, 1e-9)) - np.log2(corner_Hz)) / transition_octaves))
+    return hp ** 2
+
+
+def omni_complete_spectrum(
+    slope_east: np.ndarray,
+    slope_north: np.ndarray,
+    water_depth_m: float,
+    fs_Hz: float,
+    aperture_mtf_curve: tuple = None,
+    fmin_Hz: float = 0.08,
+    transition_octaves: float = 0.25,
+    nfft: int = 3000,
+    nperseg: int = 1500,
+    highpass_peak_fraction: float = None,
+    highpass_peak_floor_Hz: float = 0.08,
+    highpass_corner_floor_Hz: float = 0.06,
+) -> tuple:
+    """Directionally-complete omnidirectional elevation spectrum from slopes.
+
+        S_eta(f) = (P_sx + P_sy) / k(f)^2  * MTF(f)^2 * HP(f)^2
+
+    where P_sx, P_sy are the Welch slope auto-spectra, k(f) the linear-dispersion
+    wavenumber, MTF the optional aperture-MTF deconvolution gain, and HP a squared
+    logistic high-pass. Because PsE + PsN = k^2 * S_eta for a sea of arbitrary
+    directional spread, summing BOTH slope-variance components recovers the FULL
+    directional energy -- it carries no single-direction projection loss, unlike
+    the Krogstad wavelet projection in slope_to_elev_wavelet (which under-reads
+    ~25% in 0.2-0.7 Hz from directional spread). The trade-off: this is a
+    frequency spectrum only -- no phase-correct timeseries and no direction (use
+    the EWDM array path for E(f,theta)).
+
+    The HP corner is fixed at fmin_Hz, OR -- if highpass_peak_fraction is set --
+    adaptive: corner = max(highpass_corner_floor_Hz, fraction * fp), with fp the
+    peak of THIS (S_sx+S_sy)/k^2 spectrum searched over [highpass_peak_floor_Hz,
+    0.40] (same scheme as slope_to_elev_wavelet). The corner is returned so the
+    lidar reference can be put through the identical passband (highpass_squared).
+
+    Returns:
+        (f_Hz, S_eta, corner_Hz)  -- S_eta in m^2/Hz on the Welch grid; corner_Hz
+        the HP corner actually used.
+    """
+    sE = np.asarray(slope_east, dtype=float).reshape(-1)
+    sN = np.asarray(slope_north, dtype=float).reshape(-1)
+    sE = np.where(np.isfinite(sE), sE, 0.0)
+    sN = np.where(np.isfinite(sN), sN, 0.0)
+    f, P_sx = signal.welch(sE, fs_Hz, nfft=nfft, nperseg=nperseg)
+    _, P_sy = signal.welch(sN, fs_Hz, nfft=nfft, nperseg=nperseg)
+    _, k = _lindisp_with_current(2 * np.pi * np.maximum(f, 1e-6), water_depth_m, 0.0)
+    k = np.nan_to_num(np.asarray(k, dtype=float), nan=np.inf, posinf=np.inf)
+    S = (P_sx + P_sy) / np.maximum(k ** 2, 1e-12)
+    if aperture_mtf_curve is not None:
+        g = np.interp(f, aperture_mtf_curve[0], aperture_mtf_curve[1])
+        S = S * g ** 2
+    # high-pass corner: fixed (fmin_Hz) or adaptive (fraction of the spectral peak)
+    corner = fmin_Hz
+    if highpass_peak_fraction is not None:
+        sel = (f >= highpass_peak_floor_Hz) & (f <= 0.40)
+        if sel.any():
+            fp = f[sel][int(np.argmax(S[sel]))]
+            corner = max(highpass_corner_floor_Hz, highpass_peak_fraction * fp)
+    if corner is not None:
+        S = S * highpass_squared(f, corner, transition_octaves)
+    return f, S, corner
+
+
+# Cache: elevation noise PSD per unit white-slope-noise PSD, through the exact
+# inversion. Run-independent (depends only on config), so computed once.
+_LF_NOISE_TRANSFER_CACHE = {}
+
+
+def _lf_noise_transfer(fs_Hz, n, water_depth_m, fmin_Hz, fmax_Hz,
+                       transition_octaves, tukey_alpha, per_scale, skirt_correct,
+                       aperture_mtf_m, aperture_mtf_curve, nperseg, nrel=4):
+    """Welch PSD of the reconstructed elevation when the input slope is unit-PSD
+    white noise, averaged over `nrel` realizations and cached on the config."""
+    mtf_key = None
+    if aperture_mtf_curve is not None:
+        gg = np.asarray(aperture_mtf_curve[1], dtype=float)
+        mtf_key = (gg.size, round(float(gg.sum()), 6), round(float((gg ** 2).sum()), 6))
+    key = (round(float(fs_Hz), 6), int(n), round(float(water_depth_m), 6),
+           None if fmin_Hz is None else round(float(fmin_Hz), 6),
+           None if fmax_Hz is None else round(float(fmax_Hz), 6),
+           round(float(transition_octaves), 6), round(float(tukey_alpha), 6),
+           bool(per_scale), bool(skirt_correct),
+           None if aperture_mtf_m is None else round(float(aperture_mtf_m), 6),
+           mtf_key, int(nperseg))
+    cached = _LF_NOISE_TRANSFER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    sigma = np.sqrt(fs_Hz / 2.0)          # one-sided white PSD == 1
+    Pacc = None; fref = None
+    for r in range(nrel):
+        rng = np.random.default_rng(1234 + r)
+        nE = sigma * rng.standard_normal(n)
+        nN = sigma * rng.standard_normal(n)
+        en = slope_to_elev_wavelet(
+            nE, nN, water_depth_m, fs_Hz, fmin_Hz=fmin_Hz, fmax_Hz=fmax_Hz,
+            transition_octaves=transition_octaves, tukey_alpha=tukey_alpha,
+            per_scale=per_scale, skirt_correct=skirt_correct,
+            aperture_mtf_m=aperture_mtf_m, aperture_mtf_curve=aperture_mtf_curve,
+            lf_noise_suppress=False)
+        fref, Pen = signal.welch(en, fs_Hz, nperseg=nperseg)
+        Pacc = Pen if Pacc is None else Pacc + Pen
+    Pacc /= nrel
+    _LF_NOISE_TRANSFER_CACHE[key] = (fref, Pacc)
+    return fref, Pacc
+
+
+def calibrate_aperture_mtf(slope_east_fields, slope_north_fields, fs_Hz,
+                           water_depth_m, footprint_m, nperseg=512, cap=6.0,
+                           smooth_bins=5):
+    """Empirical aperture-deconvolution gain curve from one or more slope FIELDs.
+
+    The spatial-mean slope is the true slope averaged over the footprint; the
+    center pixel is the aperture-free measurement. Their spectral ratio is the
+    real aperture transfer (capturing the actual, directionally-spread sea --
+    unlike the analytic 1-D sinc, which assumes axis-aligned waves and over-
+    corrects). This returns the per-frequency amplitude boost that maps the
+    spatial-mean slope spectrum back onto the center-pixel one, clipped to `cap`
+    and switched off at/above the first sinc null (k*L/2 = pi). Pass the result
+    to slope_to_elev_wavelet(aperture_mtf_curve=...).
+
+    Args:
+        slope_east_fields, slope_north_fields : a single (ny, nx, T) field or an
+            iterable of them (their slope spectra are averaged for a stable curve).
+        fs_Hz, water_depth_m, footprint_m     : sampling rate, depth, footprint (m).
+        nperseg, cap, smooth_bins             : Welch segment, gain cap, boxcar
+            smoothing width (bins) of the gain curve.
+
+    Returns:
+        (freqs_Hz, gain) : amplitude deconvolution gain on the Welch grid.
+    """
+    ex = np.asarray(slope_east_fields, dtype=float)
+    ny_nx_t = ex.ndim == 3
+    east = [ex] if ny_nx_t else list(ex)
+    north = [np.asarray(slope_north_fields, float)] if ny_nx_t else list(np.asarray(slope_north_fields, float))
+
+    Pmean = Pcen = None
+    f = None
+    for sxF, syF in zip(east, north):
+        sxF = np.where(np.isfinite(sxF), sxF, 0.0)
+        ny, nx, _ = sxF.shape
+        cy, cx = ny // 2, nx // 2
+        f, pm = signal.welch(sxF.mean(axis=(0, 1)), fs_Hz, nperseg=nperseg)
+        _, pc = signal.welch(sxF[cy, cx, :], fs_Hz, nperseg=nperseg)
+        Pmean = pm if Pmean is None else Pmean + pm
+        Pcen = pc if Pcen is None else Pcen + pc
+
+    mtf = np.sqrt(np.clip(Pmean / np.clip(Pcen, 1e-30, None), 1e-6, 1.0))
+    if smooth_bins and smooth_bins > 1:
+        ker = np.ones(int(smooth_bins)) / int(smooth_bins)
+        mtf = np.convolve(mtf, ker, mode="same")
+    gain_emp = 1.0 / np.clip(mtf, 1.0 / cap, 1.0)
+    # Physical bound: the axis-aligned analytic sinc is the MOST a square
+    # aperture can attenuate, so the true gain must satisfy gain <= 1/|sinc|.
+    # This (a) forces gain ~ 1 in the swell band where the aperture is
+    # transparent -- preventing the empirical mean/center ratio from boosting
+    # the swell on center-pixel NOISE rather than real attenuation -- and (b)
+    # keeps the gentler empirical (directional) shape where it sits below the
+    # sinc, e.g. ~0.5-0.65 Hz.
+    _, k = _lindisp_with_current(2 * np.pi * f, water_depth_m, 0.0)
+    half = np.nan_to_num(np.asarray(k, float)) * footprint_m / 2.0
+    sinc = np.sinc(half / np.pi)
+    gain_sinc = 1.0 / np.clip(np.abs(sinc), 1.0 / cap, 1.0)
+    gain = np.clip(np.minimum(gain_emp, gain_sinc), 1.0, cap)
+    gain = np.where((half < 0.85 * np.pi) & (f > 0.05), gain, 1.0)
+    return f, gain
+
+
+def _aperture_mtf_deconv(eta, fs_Hz, footprint_m, water_depth_m, cap=6.0):
+    """Deconvolve the sinc(k*L/2) footprint-aperture low-pass from eta(t).
+
+    The spatial-mean slope is the true slope averaged over the footprint, an
+    aperture whose amplitude transfer for a wave of wavenumber k is
+    sinc(k*L/2) = sin(k*L/2)/(k*L/2). This applies the inverse gain 1/|sinc| as a
+    zero-phase spectral filter, clipped to `cap` and switched off at and beyond
+    the first null (k*L/2 = pi), where the aperture passes no signal to recover.
+    """
+    n = len(eta)
+    F = np.fft.rfft(eta)
+    f = np.fft.rfftfreq(n, d=1.0 / fs_Hz)
+    _, k = _lindisp_with_current(2 * np.pi * f, water_depth_m, 0.0)
+    k = np.nan_to_num(np.asarray(k, dtype=float), nan=0.0)
+    half = k * footprint_m / 2.0
+    sinc = np.sinc(half / np.pi)                      # np.sinc(x)=sin(pi x)/(pi x)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gain = 1.0 / np.abs(sinc)
+    gain = np.clip(np.where(np.isfinite(gain), gain, cap), 1.0, cap)
+    # only boost below the first null (and above DC); leave the rest untouched.
+    gain = np.where((half < 0.85 * np.pi) & (f > 0.05), gain, 1.0)
+    return np.fft.irfft(F * gain, n)
+
+
+def wavelet_eta_valid_slice(n_samples: int, tukey_alpha: float = 0.25) -> slice:
+    """Index slice of the taper-free core of a slope_to_elev_wavelet record.
+
+    slope_to_elev_wavelet applies a Tukey(tukey_alpha) taper to the slope
+    before the CWT, so the first/last tukey_alpha/2 of the returned eta are
+    amplitude-attenuated. Statistics (variance, Hm0, Welch) over the full
+    record inherit that deficit. This returns the slice spanning only the flat
+    (w == 1) interior, where the reconstruction is unbiased per-sample, so the
+    caller can compute taper-free statistics:
+
+        sl = wavelet_eta_valid_slice(len(eta), tukey_alpha)
+        Hm0 = 4 * np.std(eta[sl])
+
+    Args:
+        n_samples   : record length (samples)
+        tukey_alpha : Tukey alpha used in the inversion (default 0.25)
+
+    Returns:
+        slice selecting the central taper-free samples.
+    """
+    edge = int(np.ceil(0.5 * tukey_alpha * n_samples))
+    return slice(edge, n_samples - edge)
+
+
+# %%
+
+# Short-wave elevation from the 2-D slope FIELD via pyGrad2Surf (Harker &
+# O'Leary global least-squares gradient integration). This is the 1-D wavelet
+# inversion's complement: slope_to_elev_wavelet recovers the footprint-mean
+# (long-wave) elevation from the spatially-averaged slope, while this routine
+# recovers the WITHIN-footprint (short-wave) structure that spatial averaging
+# discards. Summing the two extends the usable frequency range upward toward
+# the footprint cutoff (wavelength ~ footprint size). Mirrors the canonical
+# MATLAB path in PSS_source/compute_elevation_fields_from_slope_fields.m.
+#
+# N. Laxague 2026
+
+def slope_field_to_short_wave_elev(
+    slope_east_field: np.ndarray,
+    slope_north_field: np.ndarray,
+    footprint_m: float,
+    at: str = "center",
+    g2s_N: int = 3,
+) -> np.ndarray:
+    """Per-frame gradient integration of a slope field -> short-wave eta(t).
+
+    For each time frame, the (temporal-mean-tilt-removed) east/north slope maps
+    are integrated to a surface Z(x, y) by pyGrad2Surf.g2s, and the local
+    deviation from the frame-mean surface is extracted. Because a surface plane
+    (the instantaneous long-wave tilt) has Z_center == Z_mean, the center-minus-
+    mean operation naturally rejects the long-wave tilt and returns only the
+    within-footprint short-wave displacement, which is the part the spatial-mean
+    (wavelet) inversion cannot see. Add the result to slope_to_elev_wavelet's
+    output to obtain the total local elevation.
+
+    The temporal-mean tilt is removed first (static viewing-angle bias and slow
+    drift), matching both slope_to_elev_wavelet's detrend and the MATLAB driver.
+
+    Args:
+        slope_east_field, slope_north_field : (ny, nx, T) earth-referenced slope
+            fields (d eta/dx_east, d eta/dx_north). Non-finite entries are
+            zero-filled after tilt removal.
+        footprint_m : physical side length of the (square) field footprint (m).
+            Sets the integration grid dx = footprint_m / nx; the short-wave
+            amplitude scales linearly with this.
+        at          : "center" (default) returns the center-pixel series co-
+            located with a point sensor; "rms" returns the spatial-RMS of the
+            frame's short-wave surface (a footprint-integrated short-wave height).
+        g2s_N       : stencil width passed to g2s (default 3).
+
+    Returns:
+        short_m : (T,) short-wave elevation time series (m), demeaned.
+    """
+    from pyGrad2Surf.g2s import g2s
+
+    Sx = np.asarray(slope_east_field, dtype=float)
+    Sy = np.asarray(slope_north_field, dtype=float)
+    if Sx.shape != Sy.shape or Sx.ndim != 3:
+        raise ValueError("slope fields must both be (ny, nx, T)")
+    ny, nx, T = Sx.shape
+
+    # remove the temporal-mean tilt per pixel, then zero-fill any gaps
+    Sx = Sx - np.nanmean(Sx, axis=2, keepdims=True)
+    Sy = Sy - np.nanmean(Sy, axis=2, keepdims=True)
+    Sx = np.where(np.isfinite(Sx), Sx, 0.0)
+    Sy = np.where(np.isfinite(Sy), Sy, 0.0)
+
+    dx = footprint_m / nx
+    x = np.arange(nx) * dx
+    y = np.arange(ny) * dx
+    cy, cx = ny // 2, nx // 2
+
+    short = np.empty(T, dtype=float)
+    for i in range(T):
+        # g2s Python arg order is (x, y, Zx, Zy); Zx is the gradient along x
+        # (columns -> east), Zy along y (rows -> north).
+        Z = g2s(x, y, Sx[:, :, i], Sy[:, :, i], N=g2s_N)
+        Z = np.asarray(Z, dtype=float)
+        if at == "rms":
+            short[i] = np.sqrt(np.mean((Z - Z.mean()) ** 2))
+        else:
+            short[i] = Z[cy, cx] - Z.mean()
+    return short - short.mean()
+
+
+def crosscorr_lag(a: np.ndarray, b: np.ndarray, fs_Hz: float,
+                  band_Hz: tuple = None, max_lag_s: float = 15.0,
+                  return_curve: bool = False):
+    """Lag (s) and peak correlation that best align series `a` to series `b`.
+
+    Positive lag means `a` lags `b` (a is delayed): a[t] ~ b[t - lag]. Both
+    series are mean-removed, optionally band-pass filtered (zero-phase) before
+    correlation, then the cross-correlation peak within +/- max_lag_s is found.
+    The peak lag is refined to sub-sample precision by a parabolic fit through
+    the three samples straddling the discrete maximum (so the lag is no longer
+    quantised to 1/fs), and the reported peak correlation is the fitted vertex.
+
+    Args:
+        a, b         : equal-length real time series.
+        fs_Hz        : sampling rate (Hz).
+        band_Hz      : optional (lo, hi) Butterworth band-pass before
+                       correlating; None compares the raw (mean-removed) series.
+        max_lag_s    : search window half-width (s).
+        return_curve : if True, also return (lags_s, r_curve) -- the normalized
+                       cross-correlation over the search window, for plotting.
+
+    Returns:
+        (lag_s, peak_r)                       if return_curve is False, or
+        (lag_s, peak_r, lags_s, r_curve)      if return_curve is True.
+    """
+    a = np.asarray(a, float); b = np.asarray(b, float)
+    if band_Hz is not None:
+        lo, hi = band_Hz
+        bb, aa = signal.butter(4, [lo / (fs_Hz / 2), hi / (fs_Hz / 2)], btype="band")
+        a = signal.filtfilt(bb, aa, a - a.mean())
+        b = signal.filtfilt(bb, aa, b - b.mean())
+    else:
+        a = a - a.mean(); b = b - b.mean()
+    nan_out = (np.nan, np.nan, np.array([]), np.array([])) if return_curve else (np.nan, np.nan)
+    if np.std(a) < 1e-12 or np.std(b) < 1e-12:
+        return nan_out
+    xc = signal.correlate(a, b, "full") / (np.std(a) * np.std(b) * len(a))
+    lags = signal.correlation_lags(len(a), len(b), "full")
+    keep = np.abs(lags) <= int(max_lag_s * fs_Hz)
+    xc, lags = xc[keep], lags[keep]
+    i = int(np.argmax(xc))
+    lag_samp, peak_r = float(lags[i]), float(xc[i])
+    # parabolic sub-sample refinement around the discrete peak
+    if 0 < i < len(xc) - 1:
+        y0, y1, y2 = xc[i - 1], xc[i], xc[i + 1]
+        denom = y0 - 2 * y1 + y2
+        if abs(denom) > 1e-12:
+            delta = 0.5 * (y0 - y2) / denom            # in (-1, 1) samples
+            lag_samp = lags[i] + delta
+            peak_r = y1 - 0.25 * (y0 - y2) * delta
+    lag_s = lag_samp / fs_Hz
+    if return_curve:
+        return lag_s, peak_r, lags / fs_Hz, xc
+    return lag_s, peak_r
 
 
 # %%

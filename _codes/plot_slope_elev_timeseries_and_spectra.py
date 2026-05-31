@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
-from subroutines.utils import figure_style, slope_to_elev_wavelet
+from subroutines.utils import figure_style, slope_to_elev_wavelet, omni_complete_spectrum
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -47,38 +47,47 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 sampling_rate_PSS = np.float64(10)
 sampling_rate_lidar = np.float64(10)
 
-nperseg = 2048
-
-run_ind = 141
+nperseg = 1024
+run_ind = 51
 
 dt = 1/sampling_rate_PSS
 t = np.arange(slope_east_emp.shape[1]) * dt
 
 water_depth_m = 15.0
 f_lp = 1/2
-f_hp = 1/15
+f_hp = 0.08   # gentle highpass corner on the elevation inversion (matches the
+              # legacy FFT pipeline); suppresses the 1/k^2-amplified low-f drift
+
+# Empirical aperture-MTF curve (calibrated camera-only from the field's
+# center-vs-mean slope spectra by make_aperture_mtf_curve.py); deconvolves the
+# 0.3-0.7 Hz attenuation the footprint averaging imposes on the spatial-mean
+# slope. These demonstration plots use the long-wave wavelet inversion only.
+_mtf = np.load(path+'ASIT2019_aperture_mtf_gain.npz')
+mtf_curve = (_mtf['freqs_Hz'], _mtf['gain'])
 
 sE = slope_east_no[run_ind,:]
 sN = slope_north_no[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_no = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
+elev_m_no = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
 
 sE = slope_east_lab[run_ind,:]
 sN = slope_north_lab[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_lab = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
+elev_m_lab = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
 
 sE = slope_east_emp[run_ind,:]
 sN = slope_north_emp[run_ind,:]
 sE = np.where(np.isfinite(sE), sE, 0.0)
 sN = np.where(np.isfinite(sN), sN, 0.0)
-elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS)
+elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,aperture_mtf_curve=mtf_curve,fmin_Hz=f_hp)
 
 slope_lim_val = 0.3
 
-t_start = 80
+t_start = 456   # start of the displayed 20-s window (an energetic stretch of
+                # this run; the lidar timeseries is not collocated so it is not
+                # overlaid -- spectral comparison is in elevation_omnispect.pdf)
 
 t = t - t_start
 
@@ -103,8 +112,9 @@ ax1.legend(loc='upper left')
 
 ax2 = ax1.twinx()
 
-# elevation timeseries
-ax2.plot(t,elev_m_emp,linewidth=2, label='$\eta$', color=color_list[2])
+# elevation timeseries: E-PSS wavelet long-wave inversion (identified by the
+# red right-hand axis -- no legend entry needed).
+ax2.plot(t, elev_m_emp, linewidth=2, color=color_list[2])
 ax2.set_ylabel('$\eta$ [m]',color=color_list[2])
 ax2.tick_params(axis='y',labelcolor=color_list[2])
 
@@ -114,23 +124,38 @@ plt.savefig('../_figures/wave_slope_elev_timeseries.pdf',bbox_inches='tight')
 
 # %%
 
-f_Hz_lidar, Pxx_den_lidar = signal.welch(elev_m_lidar[0,:,run_ind], sampling_rate_lidar, nperseg=nperseg/3)
-f_Hz, Pxx_den_no = signal.welch(elev_m_no, sampling_rate_PSS, nperseg=nperseg)
-f_Hz, Pxx_den_lab = signal.welch(elev_m_lab, sampling_rate_PSS, nperseg=nperseg)
-f_Hz, Pxx_den_emp = signal.welch(elev_m_emp, sampling_rate_PSS, nperseg=nperseg)
+# E-PSS omnidirectional spectrum is the directionally-complete (S_sx+S_sy)/k^2
+# estimator (omni_complete_spectrum), one curve per gain treatment. It carries
+# the full directional spread (no single-direction projection loss), so it is
+# THE E-PSS omni product -- not a separate overlay. Same aperture-MTF gain^2 and
+# f_hp high-pass as the dataset (compute_all_omnidirectional_spectra.py). The
+# elevation timeseries panel above still uses the wavelet inversion (this
+# estimator is a frequency spectrum only).
+f_Hz_lidar, Pxx_den_lidar = signal.welch(elev_m_lidar[0,:,run_ind], sampling_rate_lidar, nperseg=nperseg)
+f_Hz, Pxx_den_no, _ = omni_complete_spectrum(slope_east_no[run_ind], slope_north_no[run_ind],
+    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
+_, Pxx_den_lab, _ = omni_complete_spectrum(slope_east_lab[run_ind], slope_north_lab[run_ind],
+    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
+_, Pxx_den_emp, _ = omni_complete_spectrum(slope_east_emp[run_ind], slope_north_emp[run_ind],
+    water_depth_m, sampling_rate_PSS, aperture_mtf_curve=mtf_curve, highpass_peak_fraction=0.5, nperseg=nperseg)
 
-fig = plt.figure(figsize=(fullwidth/2,fullwidth*0.65))
+# Start each curve at the first bin with f > 0.05 Hz (lidar and E-PSS are on
+# different Welch grids, so the start index is computed per grid).
+i_lid = int(np.argmax(f_Hz_lidar > 0.05))
+i_pss = int(np.argmax(f_Hz > 0.05))
 
-plt.plot(f_Hz_lidar[2:len(f_Hz_lidar)],Pxx_den_lidar[2:len(f_Hz_lidar)],color='black',linewidth=2,label="lidar")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_no[2:len(f_Hz)],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_lab[2:len(f_Hz)],color=color_list[1],linewidth=2,alpha=0.75,label="E-PSS, lab gain")
-plt.plot(f_Hz[2:len(f_Hz)],Pxx_den_emp[2:len(f_Hz)],color=color_list[2],linewidth=2,alpha=0.75,label="E-PSS, emp. gain")
+fig = plt.figure(figsize=(fullwidth/2,fullwidth/2*4/3))
+
+plt.plot(f_Hz_lidar[i_lid:],Pxx_den_lidar[i_lid:],color='black',linewidth=2,label="lidar")
+plt.plot(f_Hz[i_pss:],Pxx_den_no[i_pss:],color=color_list[0],linewidth=2,alpha=0.75,label="E-PSS, no gain")
+plt.plot(f_Hz[i_pss:],Pxx_den_lab[i_pss:],color=color_list[1],linewidth=2,alpha=0.75,label="E-PSS, lab gain")
+plt.plot(f_Hz[i_pss:],Pxx_den_emp[i_pss:],color=color_list[2],linewidth=2,alpha=0.75,label="E-PSS, emp. gain")
 
 plt.grid(which='major', linestyle='-', linewidth=0.75)
 plt.grid(which='minor', linestyle=':', linewidth=0.75)
 
 plt.xlim(1e-2,1e1)
-plt.ylim(5e-4,1e1)
+plt.ylim(1e-4,1e0)
 
 plt.xscale('log')
 plt.yscale('log')
@@ -138,7 +163,9 @@ plt.yscale('log')
 plt.xlabel('f [Hz]')
 plt.ylabel(r'$F_{\eta\eta}(f)$ [m$^2$Hz$^{-1}$]')
 
-plt.legend(loc='upper right')
+plt.legend(loc='lower left')
 
 plt.savefig('../_figures/elevation_omnispect.pdf',bbox_inches='tight')
+
+print(f'[run {run_ind}] E-PSS long-wave eta: std={np.std(elev_m_emp):.3f} m')
 
