@@ -53,8 +53,7 @@ slope_stats_uncertainties = [1e-2,1e-2,0.05,0.1,0.03]
 
 dolp_gain_choices = ['no gain','lab gain','empirical gain']
 
-U10_bin_edges = np.arange(1,15,2)
-U10_bin_centers = U10_bin_edges[0:len(U10_bin_edges)-1] + 1
+U10_bin_centers, U10_bin_edges, dU = wind_speed_bins()
 
 y_lims = np.nan*np.ones((5,2))
 
@@ -171,7 +170,7 @@ axs[row_index,col_index].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 
 col_index = col_index + 1
 
-axs[row_index,col_index].bar(U10_bin_centers,bin_counts,color='black',label='counts',width=2,alpha=0.5)
+axs[row_index,col_index].bar(U10_bin_centers,bin_counts,color='black',label='counts',width=dU,alpha=0.5)
         
 axs[row_index,col_index].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 axs[row_index,col_index].set_ylabel('counts per bin')

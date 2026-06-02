@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
 from eta_field_recon import lindisp_with_current
-from subroutines.utils import figure_style
+from subroutines.utils import figure_style, wind_speed_bins
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -56,15 +56,7 @@ F_f_m2_Hz_empirical_gain[[0,1],:] = np.nan
 F_f_m2_Hz_empirical_gain[f_inds,:] = np.nan
 df = np.median(np.diff(f_Hz))    
 
-U_centers = np.float64(np.arange(2,14,2))
-dU = np.float64(2.0)
-U_boundaries = np.arange(U_centers[0]-dU/2,U_centers[len(U_centers)-1]+dU/2+dU,dU)
-
-U_low_string = (U_centers-dU/2).astype(str)
-U_high_string = (U_centers+dU/2).astype(str)
-
-U_centers_string = U_centers.astype(str)
-dU_string = dU.astype(str)
+U_centers, U_boundaries, dU = wind_speed_bins()
 
 F_f_binned = np.nan*np.ones((len(U_centers),len(f_Hz)))
 S_f_binned = np.nan*np.ones((len(U_centers),len(f_Hz_slope)))
@@ -76,8 +68,9 @@ for i in np.arange(len(U_centers)):
     
     inds = (U10_m_s > U_centers[i] - dU/2) & (U10_m_s <= U_centers[i] + dU/2)
     F_f_binned[i,:] = np.nanmean(F_f_m2_Hz_empirical_gain[:,inds],axis=1).T
-    S_f_binned[i,:] = np.mean(S_f[inds,:],axis=0)
-    S_k_binned[i,:] = np.mean(S_k[inds,:],axis=0)
+    # nanmean so a single NaN run does not drop an entire wind bin's short-wave spectrum
+    S_f_binned[i,:] = np.nanmean(S_f[inds,:],axis=0)
+    S_k_binned[i,:] = np.nanmean(S_k[inds,:],axis=0)
     
 T_s = f_Hz**-1
 T_s_slope = f_Hz_slope**-1

@@ -2,6 +2,7 @@
 Project-specific helpers for the E-PSS paper.
 
     figure_style                          paper plot styling
+    wind_speed_bins                       canonical fixed-width U10 bins
     mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
     compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier slope PDF
     fit_gram_charlier_slope_pdf           least-squares Gram-Charlier fit
@@ -79,6 +80,19 @@ def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
     fullheight = 10
 
     return color_list, fullwidth, fullheight, fsize
+
+# %%
+
+# Canonical fixed-width U10 bins for wind-binned figures; Umin/Umax are the outer edges
+
+# N. Laxague 2026
+
+def wind_speed_bins(Umin=2.0, Umax=12.0, dU=2.0):
+
+    edges = np.arange(Umin, Umax + dU / 2, dU)
+    centers = edges[:-1] + dU / 2
+
+    return centers, edges, dU
 
 # %%
 
