@@ -152,8 +152,8 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
     c04 = 0.4
     c22 = 0.12
 
-    # Create meshgrid for xi and zeta (normalized cross and upwind mss)
-    xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_cross), slope_centers / np.sqrt(mss_up))
+    # xi (crosswind) on axis 0, zeta (upwind) on axis 1 via indexing='ij'
+    xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_cross), slope_centers / np.sqrt(mss_up), indexing='ij')
 
     coeff = (2 * np.pi * np.sqrt(mss_up) * np.sqrt(mss_cross)) ** -1
     PDF_cross_along = coeff * np.exp(-(xi**2 + zeta**2) / 2) * (
@@ -171,7 +171,7 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
             'slope_cross': slope_centers,
             'slope_up': slope_centers
             },
-        dims = {'slope_cross','slope_up'}
+        dims = ['slope_cross', 'slope_up']
         )
 
     wave_slope_PDF['PDF_cross_along'] = wave_slope_PDF/wave_slope_PDF.integrate('slope_cross').integrate('slope_up')
@@ -189,8 +189,8 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
 
 def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
 
-    # Create meshgrid for xi and zeta
-    xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_c), slope_centers / np.sqrt(mss_u))
+    # xi (crosswind) on axis 0, zeta (upwind) on axis 1 to match P_slope_c_u; 'xy' would transpose the model
+    xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_c), slope_centers / np.sqrt(mss_u), indexing='ij')
 
     # Function to fit
     def fit(b, x, y):

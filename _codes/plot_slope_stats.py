@@ -89,10 +89,15 @@ for i in np.arange(2):
         inds = ds['DoLP gain'][:] == dolp_gain_choices[j]
         shortname = 'mss_' + suffix_tags[i]
         longname = shortname + '_long'
-        all_values = ds[shortname][:] + ds[longname][:]
+        all_values = np.ma.filled(ds[shortname][:], np.nan) + np.ma.filled(ds[longname][:], np.nan)
         values = all_values[inds]
-        U10_m_s = U10_m_s_all[inds]
-        
+        U10_m_s = np.ma.filled(U10_m_s_all[:], np.nan)[inds]
+
+        # Drop NaN runs before binning so one NaN does not null an entire bin
+        finite = np.isfinite(values) & np.isfinite(U10_m_s)
+        values = values[finite]
+        U10_m_s = U10_m_s[finite]
+
         bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s,values, statistic='mean', bins=U10_bin_edges)
         bin_std, _, _ = stats.binned_statistic(U10_m_s,values, statistic='std', bins=U10_bin_edges)
         bin_counts, _, _ = stats.binned_statistic(U10_m_s, values, statistic='count', bins=U10_bin_edges)
@@ -125,29 +130,29 @@ plt.savefig('../_figures/mss_upwind_crosswind.pdf',bbox_inches='tight')
 fig, axs = plt.subplots(3, 2, sharex=True, figsize=(fullwidth, fullheight*0.9))
 
 for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_stats_output_names_truncated):
-    
+
     all_values = ds[slope_stats_output_names[i]][:]
-    
+
     for j in np.arange(len(dolp_gain_choices)):
-                
+
         inds = ds['DoLP gain'][:] == dolp_gain_choices[j]
         values = all_values[inds]
         U10_m_s = U10_m_s_all[inds]
-    
+
         bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s,values, statistic='mean', bins=U10_bin_edges)
         bin_std, _, _ = stats.binned_statistic(U10_m_s,values, statistic='std', bins=U10_bin_edges)
         bin_counts, _, _ = stats.binned_statistic(U10_m_s, values, statistic='count', bins=U10_bin_edges)
-        
+
         bin_95CI = 1.96*bin_std/bin_counts
         bin_upper = bin_means + bin_95CI
         bin_lower = bin_means - bin_95CI
-        
+
         row_index = np.int16(np.floor(i/2))
         col_index = np.int16(i - 2*row_index)
 
         axs[row_index,col_index].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[j], alpha=0.25)
         axs[row_index,col_index].plot(U10_bin_centers,bin_means,'-',linewidth=2,label=dolp_gain_choices[j],markersize=10)
-        
+
     bin_upper = BH_slope_stats[slope_stats_output_names[i]] + slope_stats_uncertainties[i]
     bin_lower = BH_slope_stats[slope_stats_output_names[i]] - slope_stats_uncertainties[i]
     

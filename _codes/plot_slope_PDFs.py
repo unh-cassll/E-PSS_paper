@@ -43,13 +43,14 @@ panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
 slope_PDF = np.nan*np.ones((190,200,3,2))
 
-slope_PDF[:,:,0,0] = np.trapezoid(slope_histogram_crosswind_upwind_no,x=slope_centers,axis=2)
-slope_PDF[:,:,1,0] = np.trapezoid(slope_histogram_crosswind_upwind_lab,x=slope_centers,axis=2)
-slope_PDF[:,:,2,0] = np.trapezoid(slope_histogram_crosswind_upwind_emp,x=slope_centers,axis=2)
+# Histograms are (runs, crosswind, upwind); last index 0 = upwind marginal, 1 = crosswind marginal (matches figure columns)
+slope_PDF[:,:,0,0] = np.trapezoid(slope_histogram_crosswind_upwind_no,x=slope_centers,axis=1)
+slope_PDF[:,:,1,0] = np.trapezoid(slope_histogram_crosswind_upwind_lab,x=slope_centers,axis=1)
+slope_PDF[:,:,2,0] = np.trapezoid(slope_histogram_crosswind_upwind_emp,x=slope_centers,axis=1)
 
-slope_PDF[:,:,0,1] = np.trapezoid(slope_histogram_crosswind_upwind_no,x=slope_centers,axis=1)
-slope_PDF[:,:,1,1] = np.trapezoid(slope_histogram_crosswind_upwind_lab,x=slope_centers,axis=1)
-slope_PDF[:,:,2,1] = np.trapezoid(slope_histogram_crosswind_upwind_emp,x=slope_centers,axis=1)
+slope_PDF[:,:,0,1] = np.trapezoid(slope_histogram_crosswind_upwind_no,x=slope_centers,axis=2)
+slope_PDF[:,:,1,1] = np.trapezoid(slope_histogram_crosswind_upwind_lab,x=slope_centers,axis=2)
+slope_PDF[:,:,2,1] = np.trapezoid(slope_histogram_crosswind_upwind_emp,x=slope_centers,axis=2)
 
 slope_PDF = np.abs(slope_PDF)
 

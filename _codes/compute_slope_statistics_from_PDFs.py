@@ -19,17 +19,33 @@ warnings.filterwarnings("ignore")
 output_file_name = '../_data/slope_statistics_dataset.nc'
 pathname = Path(output_file_name)
 
-if pathname.exists():
-    print(f"File already exists: {pathname}")
-    
+path = '../_data/'
+
+# Inputs; recompute whenever any is newer than the cached output
+input_files = [
+    path + 'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc',
+    path + 'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc',
+    path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc',
+    path + 'ASIT2019_supporting_environmental_observations.nc',
+]
+
+
+def _output_up_to_date(out_path, in_paths):
+    if not out_path.exists():
+        return False
+    out_mtime = out_path.stat().st_mtime
+    return all(Path(p).stat().st_mtime <= out_mtime for p in in_paths)
+
+
+if _output_up_to_date(pathname, input_files):
+    print(f"File already up to date: {pathname}")
+
 else:
-    
+
     print("Computing wave slope statistics...")
 
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
-    
-    path = '../_data/'
-    
+
     kappa = 0.4
     
     ds_no = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc')
@@ -91,15 +107,15 @@ else:
     
     slope_stats_array = np.nan*np.ones((num_runs,7,3))
     slope_stats_output_names = ['c21','c03','c40','c04','c22','R_squared','RMSE']
-    
+
     for i in range(len(U10_m_s)):
-        
+
         out_struc_no = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_no[i,:,:], mss_upwind_no[i], mss_crosswind_no[i])
-        out_struc_lab = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_lab[i,:,:], mss_upwind_lab[i], mss_crosswind_lab[i])        
-        out_struc_emp = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_emp[i,:,:], mss_upwind_emp[i], mss_crosswind_emp[i])    
-        
+        out_struc_lab = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_lab[i,:,:], mss_upwind_lab[i], mss_crosswind_lab[i])
+        out_struc_emp = fit_gram_charlier_slope_pdf(slope_centers, slope_histogram_crosswind_upwind_emp[i,:,:], mss_upwind_emp[i], mss_crosswind_emp[i])
+
         for j in range(7):
-            
+
             slope_stats_array[i,j,0] = out_struc_no[slope_stats_output_names[j]]
             slope_stats_array[i,j,1] = out_struc_lab[slope_stats_output_names[j]]
             slope_stats_array[i,j,2] = out_struc_emp[slope_stats_output_names[j]]
@@ -121,7 +137,7 @@ else:
     slope_stats_ds['c40'] = np.concatenate((slope_stats_array[:,2,0],slope_stats_array[:,2,1],slope_stats_array[:,2,2]))
     slope_stats_ds['c04'] = np.concatenate((slope_stats_array[:,3,0],slope_stats_array[:,3,1],slope_stats_array[:,3,2]))
     slope_stats_ds['c22'] = np.concatenate((slope_stats_array[:,4,0],slope_stats_array[:,4,1],slope_stats_array[:,4,2]))
-    
+
     slope_stats_ds['R_squared'] = np.concatenate((slope_stats_array[:,5,0],slope_stats_array[:,5,1],slope_stats_array[:,5,2]))
     slope_stats_ds['RMSE'] = np.concatenate((slope_stats_array[:,6,0],slope_stats_array[:,6,1],slope_stats_array[:,6,2]))
     
@@ -141,7 +157,7 @@ else:
     slope_stats_ds["c40"].attrs = {"units": "none", "long_name": "Gram-Charlier coefficient c40 (~kurtosis)"}
     slope_stats_ds["c04"].attrs = {"units": "none", "long_name": "Gram-Charlier coefficient c04 (~kurtosis)"}
     slope_stats_ds["c22"].attrs = {"units": "none", "long_name": "Gram-Charlier coefficient c22 (~kurtosis)"}
-    
+
     slope_stats_ds["R_squared"].attrs = {"units": "none", "long_name": "coefficient of determination"}
     slope_stats_ds["RMSE"].attrs = {"units": "none", "long_name": "root-mean-square-error"}
     
