@@ -15,7 +15,7 @@ from sklearn.metrics import mean_squared_error
 from scipy import stats
 
 from eta_field_recon import lindisp_with_current
-from subroutines.utils import figure_style, compute_mean_wave_direction_and_spreading
+from subroutines.utils import figure_style, compute_mean_wave_direction_and_spreading, wind_speed_bins
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -186,8 +186,7 @@ metrics[0] = (mae, rmse)
 
 # %%
 
-U10_bin_edges = np.arange(1,15,2)
-U10_bin_centers = U10_bin_edges[0:len(U10_bin_edges)-1] + np.diff(U10_bin_edges)/2
+U10_bin_centers, U10_bin_edges, dU = wind_speed_bins()
 
 inds = ~np.isnan(MWD_diff)
 

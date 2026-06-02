@@ -68,7 +68,7 @@ run_ind = 162
 lowcut_filter = 0.05
 highcut_filter = 1
 
-f_cut_high = 0.5
+f_cut_high = np.sqrt(9.81*k_rad_m_Pyxis[0])/(2*np.pi)
 f_cut_low = 0.05
 
 theta_halfwidth = 120
@@ -175,7 +175,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth*0.45), layout=
 
 inds_keep = f_Hz_ADCP < f_cut_high
 inds_keep_MEM = D_EPSS["frequency"].data < f_cut_high
-inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high*1.1
+inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high
 
 pc1 = ax1.pcolormesh(theta_deg_ADCP,f_Hz_ADCP[inds_keep],D_ADCP[inds_keep,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax1.pcolor(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')

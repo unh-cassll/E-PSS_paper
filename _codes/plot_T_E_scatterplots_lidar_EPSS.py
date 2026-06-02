@@ -153,4 +153,4 @@ plt.ylabel(r'$T_{E}$, E-PSS [s]')
 
 sns.despine(right=False,top=False)
 
-plt.savefig('../_figures/T_E_comparison_lidar_EPSS.pdf',bbox_inches='tight')
+plt.savefig('../_figures/T_E_comparison_lidar_epss.pdf',bbox_inches='tight')

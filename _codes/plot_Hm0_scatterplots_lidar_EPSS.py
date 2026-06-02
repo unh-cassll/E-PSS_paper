@@ -144,4 +144,4 @@ plt.ylabel(r'$H_{m0}$, E-PSS [m]')
 
 sns.despine(right=False,top=False)
 
-plt.savefig('../_figures/Hm0_comparison_lidar_EPSS.pdf',bbox_inches='tight')
+plt.savefig('../_figures/Hm0_comparison_lidar_epss.pdf',bbox_inches='tight')

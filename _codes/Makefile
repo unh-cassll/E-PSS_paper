@@ -2,8 +2,7 @@
 
 all: figures
 
-figures: array_directional_spectrum \
-	binned_omnispect \
+figures: binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
 	DoLP_AOI_field \
@@ -16,9 +15,6 @@ figures: array_directional_spectrum \
 	T_E_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
 	
-array_directional_spectrum: plot_array_directional_spectrum.py
-	python3 plot_array_directional_spectrum.py
-
 binned_omnispect: plot_binned_omnispect.py
 	python3 plot_binned_omnispect.py
 	
