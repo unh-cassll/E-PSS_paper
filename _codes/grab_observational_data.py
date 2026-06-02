@@ -1,7 +1,7 @@
-
 """
-Created on Fri Oct 31 09:13:23 2025
+Download observational data files from Zenodo if not already present locally.
 
+Created: 2025-10-31
 @author: nathanlaxague
 """
 
@@ -11,17 +11,17 @@ import time
 
 import warnings
 
-# Suppress all warnings
+# Suppress warnings
 warnings.filterwarnings("ignore")
 
-# define URL and list of filenames to grab
+# Zenodo base URL and target filenames
 URL = "https://zenodo.org/records/18881301/files/"
 filenames_to_grab = ["ASIT2019_supporting_environmental_observations.nc", "ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_no_gain.nc","ASIT2019_EPSS_directional_spectra.nc","ASIT2019_omnidirectional_spectra.nc","slope_statistics_dataset.nc", "Elfouhaily_et_al_1997_cumulative_mss.nc", "Piermont2025_DoLP_AoI_observations.nc", "Run051_example_Stokes_parameters.nc"]
 suffix = "?download=1"
 
 local_dir = '_data'
 
-# loop over the list of files to grab; download each one if a local copy doesn't exist
+# Download each file if a local copy does not exist
 for short_fname in filenames_to_grab:
     
     external_fname = URL + short_fname + suffix

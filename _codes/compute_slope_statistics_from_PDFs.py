@@ -1,7 +1,6 @@
 """
-Created on Mon Sep 15 22:24:47 2025
-
-@author: nathanlaxague
+Compute Gram-Charlier slope statistics (c21, c03, c40, c04, c22) from
+2-D slope PDFs for each DoLP gain condition; save to NetCDF.
 """
 
 from pathlib import Path
@@ -15,7 +14,6 @@ from subroutines.utils import *
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 output_file_name = '../_data/slope_statistics_dataset.nc'
@@ -28,7 +26,6 @@ else:
     
     print("Computing wave slope statistics...")
 
-    # Set custom property cycle colors
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
     
     path = '../_data/'

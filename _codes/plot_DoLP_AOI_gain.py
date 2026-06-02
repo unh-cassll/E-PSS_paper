@@ -1,6 +1,7 @@
 """
-Created on Fri Sep 12 12:16:43 2025
+Plot DoLP vs. AOI curves and example DoLP images for the empirical gain correction.
 
+Created: 2025-09-12
 @author: nathanlaxague
 """
 
@@ -16,7 +17,7 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
+# Suppress warnings
 warnings.filterwarnings("ignore")
 
 fn = '../_data/Run051_example_Stokes_parameters.nc'

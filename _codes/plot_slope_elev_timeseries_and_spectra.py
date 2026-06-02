@@ -1,7 +1,6 @@
 """
-Created on Tue Sep  9 15:01:17 2025
-
-@author: nathanlaxague
+Plot wave slope and elevation timeseries and omnidirectional elevation spectra.
+Compares E-PSS (no/lab/empirical gain) against lidar reference.
 """
 
 import numpy as np
@@ -19,7 +18,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81;
@@ -56,8 +54,7 @@ t = np.arange(slope_east_emp.shape[1]) * dt
 
 water_depth_m = 15.0
 f_lp = 1/2
-f_hp = 0.08   # gentle highpass corner on the elevation inversion (matches the
-              # legacy FFT pipeline); suppresses the 1/k^2-amplified low-f drift
+f_hp = 0.08   # Hz; highpass corner for elevation inversion; suppresses 1/k²-amplified low-f drift
 
 sE = slope_east_no[run_ind,:]
 sN = slope_north_no[run_ind,:]
@@ -79,9 +76,7 @@ elev_m_emp = slope_to_elev_wavelet(sE,sN,water_depth_m,sampling_rate_PSS,fmin_Hz
 
 slope_lim_val = 0.3
 
-t_start = 456   # start of the displayed 20-s window (an energetic stretch of
-                # this run; the lidar timeseries is not collocated so it is not
-                # overlaid -- spectral comparison is in elevation_omnispect.pdf)
+t_start = 456   # s; start of displayed 20-s window
 
 t = t - t_start
 
@@ -89,9 +84,7 @@ fig, ax1 = plt.subplots(figsize=(fullwidth, fullwidth/2))
 
 plt.xlim(0,20)
 
-# Slope timeseries (demeaned: the raw series carry a fixed viewing-angle tilt
-# of ~0.1 rad on s_E and ~0.56 rad on s_N, which would push s_N off the plot
-# and is removed inside slope_to_elev_wavelet before the inversion anyway).
+# Demeaned slope timeseries (removes fixed viewing-angle tilt)
 sE_plot = slope_east_emp[run_ind,:] - np.mean(slope_east_emp[run_ind,:])
 sN_plot = slope_north_emp[run_ind,:] - np.mean(slope_north_emp[run_ind,:])
 ax1.plot(t,sE_plot, '--',linewidth=2, label='$s_E$', color='black')
@@ -106,8 +99,7 @@ ax1.legend(loc='upper left')
 
 ax2 = ax1.twinx()
 
-# elevation timeseries: E-PSS wavelet long-wave inversion (identified by the
-# red right-hand axis -- no legend entry needed).
+# E-PSS wavelet elevation timeseries; m
 ax2.plot(t, elev_m_emp, linewidth=2, color=color_list[2])
 ax2.set_ylabel('$\eta$ [m]',color=color_list[2])
 ax2.tick_params(axis='y',labelcolor=color_list[2])
@@ -123,7 +115,7 @@ f_Hz, Pxx_den_no = omni_complete_spectrum(slope_east_no[run_ind], slope_north_no
 f_Hz, Pxx_den_lab = omni_complete_spectrum(slope_east_lab[run_ind], slope_north_lab[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg)
 f_Hz, Pxx_den_emp = omni_complete_spectrum(slope_east_emp[run_ind], slope_north_emp[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg)
 
-# 8x8 sub-aperture mean Krogstad (long wave) blended with the g2s short-wave field
+# 8x8 sub-aperture Krogstad long-wave spectrum blended with g2s short-wave field
 fld = nc.Dataset(path+'ASIT2019_slope_fields_reduced.nc')
 SxF = np.where(np.isfinite(fld['slope_east'][run_ind]), fld['slope_east'][run_ind], 0.0).astype(float)
 SyF = np.where(np.isfinite(fld['slope_north'][run_ind]), fld['slope_north'][run_ind], 0.0).astype(float)

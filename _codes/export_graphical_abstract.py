@@ -1,6 +1,7 @@
 """
-Created on Sun Mar 2026 10:24:01 2026
+Export the graphical abstract SVG to PDF.
 
+Created: 2026-03-01
 @author: nathanlaxague
 """
 

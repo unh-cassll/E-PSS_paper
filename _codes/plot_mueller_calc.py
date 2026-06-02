@@ -1,7 +1,6 @@
 """
-Created on Thu Aug 28 11:39:01 2025
-
-@author: nathanlaxague
+Plot DoLP vs. incidence angle for varying upwelling fraction and sky DoLP.
+Uses Mueller calculus for air-water interface (n=1.33).
 """
 
 import numpy as np
@@ -16,7 +15,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 n = 1.33

@@ -1,8 +1,6 @@
-"""
-Created on Mon Sep 15 22:24:47 2025
-
-@author: nathanlaxague
-"""
+# Plot slope distribution statistics (MSS and Gram-Charlier coefficients)
+# binned by U10, compared against Cox & Munk [1954] and Banner & Hwang [2006].
+# @author: nathanlaxague
 
 import numpy as np
 import xarray as xr
@@ -19,7 +17,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']

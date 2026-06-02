@@ -1,6 +1,7 @@
 """
-Created on Wed Sep  3 11:05:07 2025
+Plot a Stommel diagram of wave measurement techniques in spatial/temporal scale space.
 
+Created: 2025-09-03
 @author: nathanlaxague
 """
 
@@ -14,7 +15,7 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
+# Suppress warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81

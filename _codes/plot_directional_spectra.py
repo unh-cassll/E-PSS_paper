@@ -1,23 +1,35 @@
-"""
-Created on Wed Sep 17 07:58:12 2025
-
-@author: nathanlaxague
-"""
+# Plot directional wave spectra (polar and Cartesian) for a single run,
+# comparing ADCP/MEM and E-PSS/EWDM estimates.
+# @author: nathanlaxague
 
 import numpy as np
 import xarray as xr
 
 import netCDF4 as nc
 from matplotlib import pyplot as plt
+import matplotlib.colors as mcolors
 
 import seaborn as sns
 
 from subroutines.utils import *
+from ewdm.plots import plot_directional_spectrum
 color_list,fullwidth,fullheight,fsize = figure_style()
+
+
+def to_compass(da):
+    # CW-from-N -> EWDM math angle (90 - theta), re-sorted for N-up plotting
+    d = ((90.0 - da["direction"] + 180) % 360) - 180
+    return da.assign_coords(direction=d).sortby("direction")
+
+
+# viridis with a sharp alpha cutoff so only the very bottom end is transparent
+# (polar grid shows through the empty disc; everything else opaque)
+_vir = plt.cm.viridis(np.linspace(0, 1, 256))
+_vir[:, 3] = np.clip(np.linspace(0, 1, 256) / 0.06, 0, 1)
+epss_cmap = mcolors.ListedColormap(_vir)
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81;
@@ -56,7 +68,7 @@ run_ind = 162
 lowcut_filter = 0.05
 highcut_filter = 1
 
-f_cut_high = 0.35
+f_cut_high = 0.5
 f_cut_low = 0.05
 
 theta_halfwidth = 120
@@ -77,7 +89,7 @@ inds_keep = (bigtheta >= -180) & (bigtheta <= 180)
 theta_deg_ADCP = bigtheta[inds_keep]
 Fftheta_m2_Hz_rad_ADCP = bigFftheta[:,inds_keep]
 
-# creating dataset (ADCP spectrum)
+# Build xarray dataset for ADCP directional spectrum
 dataset_ADCP = xr.Dataset(
     coords = {"frequency": f_Hz_ADCP, "direction": theta_deg_ADCP},
     data_vars = {
@@ -92,7 +104,7 @@ Fftheta_m2_Hz_rad_Pyxis = S_f_theta_Pyxis_particular*k_disp_mat**-2
 Fftheta_m2_Hz_rad_Pyxis_shifted = np.concatenate((Fftheta_m2_Hz_rad_Pyxis[:,np.arange(36,72)],Fftheta_m2_Hz_rad_Pyxis[:,np.arange(0,36)]),axis=1)
 theta_rad_Pyxis_shifted = np.concatenate((theta_rad_Pyxis[np.arange(36,72)]-2*np.pi,theta_rad_Pyxis[np.arange(0,36)]))
 
-# creating dataset (Pyxis frequency spectrum)
+# Build xarray dataset for slope-field (Pyxis) directional spectrum
 dataset_Pyxis_frequency = xr.Dataset(
     coords = {"frequency": f_Hz_Pyxis, "direction": 180/np.pi*theta_rad_Pyxis_shifted},
     data_vars = {
@@ -123,20 +135,18 @@ D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum
 # Directional wave spectra (polar plot)
 
 vmin, vmax = -3.5,-1.5
-axes_kw={"rmax": 0.6, "rstep": 0.1, "as_period": False}
+axes_kw={"rmax": 0.6, "rstep": 0.1, "as_period": False, "angle": -45}
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth/2), layout="constrained")
 plot_directional_spectrum(
-    np.log10(F_ADCP), ax=ax1, levels=None, colorbar=False,
-    axes_kw=axes_kw, vmin=vmin, vmax=vmax,
-    wspd=U10[run_ind], wdir=winddir[run_ind],
-    curspd=U_sfc_mag_m_s[run_ind],curdir=U_sfc_dir_deg[run_ind]
+    to_compass(np.log10(F_ADCP)), ax=ax1, levels=None, colorbar=False,
+    cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
+    wspd=U10[run_ind], wdir=90 - (winddir[run_ind] + 180),   # point downwind
 )
 plot_directional_spectrum(
-    np.log10(F_EPSS), ax=ax2, levels=None, colorbar=True,
+    to_compass(np.log10(F_EPSS)), ax=ax2, levels=None, colorbar=True,
     cbar_kw={"label": "$F(f,\\theta)\\;\\mathrm{[m^2 Hz^{-1} deg^{-1}]}$"},
-    axes_kw=axes_kw, vmin=vmin, vmax=vmax,
-    wspd=U10[run_ind], wdir=winddir[run_ind],
-    curspd=U_sfc_mag_m_s[run_ind],curdir=U_sfc_dir_deg[run_ind]
+    cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
+    wspd=U10[run_ind], wdir=90 - (winddir[run_ind] + 180),   # point downwind
 )
 _ = ax1.set(xlabel="", ylabel="", title="MEM, ADCP")
 _ = ax2.set(xlabel="", ylabel="", title="EWDM, E-PSS")

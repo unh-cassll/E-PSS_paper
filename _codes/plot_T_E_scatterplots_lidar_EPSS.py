@@ -1,7 +1,6 @@
 """
-Created on Mon Sep 15 12:05:23 2025
-
-@author: nathanlaxague
+Scatterplot of energy-weighted mean period T_E: E-PSS vs. lidar reference.
+Compares no/lab/empirical DoLP gain corrections.
 """
 
 import pandas as pd
@@ -18,15 +17,12 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
 
 f_lp = 0.4
-f_hp = 0.10   # excludes the 0.08-0.10 Hz band contaminated by 1/k^2-amplified
-              # low-f slope drift (cannot be filtered camera-side; the 2.9 m
-              # footprint can't separate it from swell).
+f_hp = 0.10   # Hz; excludes 0.08-0.10 Hz band contaminated by 1/k²-amplified low-f slope drift
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
 
@@ -112,9 +108,9 @@ equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='k', alpha=0.95, edgecolor='k',linewidth=2))
 plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
-# Add the textbox to the plot
-x_position = 0.02  # Starting x position for the text
-y_position = 0.93  # Starting y position for the text
+# Metrics textbox (axes-fraction coordinates)
+x_position = 0.02
+y_position = 0.93
 delta_x = [0.03,0.03,0.04]
 plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize*0.9,
         verticalalignment='top')
@@ -126,10 +122,10 @@ x_position_start = x_position
 proxy_labels = proxy_estimates.copy()
 proxy_labels[2] = 'emp'
 
-# Split the text into lines and add each line with the specified color
-x_position += 0.05  # Move over
+# Per-category metric columns
+x_position += 0.05
 for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_labels, delta_x):
-    x_position += 0.14  # Move over
+    x_position += 0.14
     plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top',horizontalalignment='center')
     plt.text(x_position, y_position, f'{r2:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
@@ -141,7 +137,7 @@ for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_va
     plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
              verticalalignment='top')
 
-x_position += 0.11  # Move over
+x_position += 0.11
 plt.text(x_position, y_position-0.049, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
          verticalalignment='top')
 plt.text(x_position, y_position-0.147, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,

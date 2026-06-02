@@ -1,7 +1,6 @@
 """
-Created on Mon Sep 15 15:40:31 2025
-
-@author: nathanlaxague
+Plot marginal slope PDFs (upwind and crosswind) binned by wind speed U10.
+Overlays Gram-Charlier reference curves from Cox and Munk [2006].
 """
 
 import matplotlib.pyplot as plt
@@ -17,7 +16,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'

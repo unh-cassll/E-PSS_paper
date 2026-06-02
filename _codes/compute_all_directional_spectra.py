@@ -1,201 +1,144 @@
 """
-Compute per-run frequency-directional wave spectra from earth-referenced PSS
-slopes via the Extended Wavelet Directional Method (EWDM, Triplets with
-use="slopes"), preceded by a wavelet-based slope -> elevation reconstruction.
-
-Replaces the previous Welch + custom Maximum Entropy Method pipeline.
-
-Created: 2025-09-17
-Refactored to EWDM/upstream: 2026-05-29
+Compute per-run E-PSS multi-aperture elevation directional spectra (f, k, nu)
+from the earth-referenced PSS slope fields. Slope fields -> camera elevation
+field (small-aperture Krogstad long wave + per-frame g2s) -> multi-aperture
+virtual-staff EWDM estimator, with the 180-deg sign resolved by the direct
+S_f_theta 3-D-FFT anchor and an onshore swell tiebreaker.
 
 @author: nathanlaxague
 """
-
-from pathlib import Path
-
+import os
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ[_v] = "1"
 import numpy as np
-import xarray as xr
-
+if not hasattr(np, 'trapz'):
+    np.trapz = np.trapezoid
 import netCDF4 as nc
-
-import ewdm
-
-from subroutines.utils import slope_to_elev_wavelet, trim_EPSS_dirspec
-
 import warnings
 warnings.filterwarnings("ignore")
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+path = '../_data/'
+output_file = path + 'ASIT2019_EPSS_directional_spectra.nc'
+fs, water_depth_m, num_samples, num_runs = 10.0, 15.0, 4096, 190
+
+# fixed grids (dx constant: 2.915 m / 32 px)
+dx = 2.915 / 32
+freqs = np.logspace(np.log10(0.035), np.log10(3.5), 64)
+k_grid = 2.0**np.linspace(np.log2(0.01), np.log2(np.pi / dx), 80)
+nu_grid = 2.0**np.linspace(np.log2(0.005), np.log2(2.0), 80)
+
+# onshore swell tiebreaker: 3 km south of Martha's Vineyard, so long swell must
+# propagate onshore (northward); flip a swell-dominated run reading offshore.
+onshore_dir = 0.0
+swell_cut = 0.16
+swell_frac = 0.15
+
+_DS = {}
 
 
-def _ewdm_dirs_to_cw_from_N(dirs_ccw_from_E):
-    """Convert EWDM's CCW-from-east bins to CW-from-North ("coming from", deg) in
-    [-180, 180). The +180 flips the slope-gradient direction that EWDM
-    Triplets(use='slopes') reports into the wave coming-from convention used by
-    the ADCP reference and the EWDM Arrays (displacement) method -- without it the
-    E-PSS directional spectrum is 180 deg reversed (e.g. run 116 peak reads ~150
-    deg instead of ~330, vs ADCP 339)."""
-    cw = (90.0 - dirs_ccw_from_E + 540.0 + 180.0) % 360.0 - 180.0
-    order = np.argsort(cw)
-    return cw[order], order
+def _ds():
+    if not _DS:
+        _DS['fld'] = nc.Dataset(path + 'ASIT2019_slope_fields_reduced.nc')
+        _DS['ref'] = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+    return _DS
 
 
-output_file_name = '../_data/ASIT2019_EPSS_directional_spectra.nc'
-pathname = Path(output_file_name)
+def _ewmean(deg, w):
+    a = np.radians(deg)
+    return np.degrees(np.arctan2((w * np.sin(a)).sum(), (w * np.cos(a)).sum()))
 
-if pathname.exists():
-    print(f"File already exists: {pathname}")
 
-else:
+def work(run_ind):
+    from multiaperture import (build_eta_field, default_apertures,
+                               multiaperture_spectra, sftheta_sign_anchor)
+    d = _ds()
+    se = np.ma.filled(d['fld']['slope_east'][run_ind][..., :num_samples], np.nan)
+    sn = np.ma.filled(d['fld']['slope_north'][run_ind][..., :num_samples], np.nan)
+    if not np.isfinite(se).any():                        # NaN-flagged (corrupt) run
+        return run_ind, None
+    eta, _ = build_eta_field(np.nan_to_num(se).astype(float),
+                             np.nan_to_num(sn).astype(float), water_depth_m, fs)
+    M = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, water_depth_m, fs,
+                              apertures=default_apertures(), n_staff=16,
+                              sign_anchor=sftheta_sign_anchor(d['ref'], run_ind))
+    Fft, Fkd, Qnd = M['Fft'], M['Fkd'], M['Qnd']
+    thbar, sigma, ref = M['thbar'], M['sigma'], M['sign_ref']
 
-    print("Computing frequency-directional spectra via E-PSS/EWDM (Triplets)...")
+    # onshore swell tiebreaker (flip the whole run 180 deg if its swell is offshore)
+    sb = freqs < swell_cut
+    if M['Sf'][sb].sum() > swell_frac * M['Sf'].sum():
+        th_sw = _ewmean(thbar[sb], M['Sf'][sb])
+        if np.cos(np.radians(th_sw - onshore_dir)) < 0:
+            roll = len(M['theta']) // 2
+            Fft = np.roll(Fft, roll, axis=1)
+            Fkd = np.roll(Fkd, roll, axis=1)
+            Qnd = np.roll(Qnd, roll, axis=1)
+            thbar = (thbar + 180.0) % 360.0
+            ref = (ref + 180.0) % 360.0
 
-    g = 9.81
+    return run_ind, dict(Sf=M['Sf'], Fk=M['Fk'], Qn=M['Qn'], Fft=Fft, Fkd=Fkd,
+                         Qnd=Qnd, thbar=thbar, sigma=sigma, sign_ref=ref,
+                         theta=M['theta'], var_eta=float(M['var_eta']))
 
-    path = '../_data/'
 
-    fn = path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'
-    ds = nc.Dataset(fn)
+def main():
+    from pathlib import Path
+    if Path(output_file).exists():
+        print(f"File already exists: {output_file}")
+        return
+    nw = min(8, (os.cpu_count() or 4) - 1)
+    print(f"Computing E-PSS multi-aperture directional spectra ({num_runs} runs, {nw} workers)...")
+    results = {}
+    with ProcessPoolExecutor(max_workers=nw) as ex:
+        futs = {ex.submit(work, r): r for r in range(num_runs)}
+        done = 0
+        for fu in as_completed(futs):
+            r, out = fu.result(); done += 1
+            if out is not None:
+                results[r] = out
+            if done % 25 == 0:
+                print(f"  {done}/{num_runs}")
 
-    slope_north = ds['slope_north'][:]
-    slope_east = ds['slope_east'][:]
+    th = results[next(iter(results))]['theta']
+    nf, nd, nk, nn = len(freqs), len(th), len(k_grid), len(nu_grid)
+    nan = lambda *s: np.full(s, np.nan, 'f4')
+    Fft = nan(nf, nd, num_runs); Fkd = nan(nk, nd, num_runs); Qnd = nan(nn, nd, num_runs)
+    Sf = nan(nf, num_runs); Fk = nan(nk, num_runs); Qn = nan(nn, num_runs)
+    Tb = nan(nf, num_runs); Sg = nan(nf, num_runs); Rf = nan(nf, num_runs); var = nan(num_runs)
+    for r, o in results.items():
+        Fft[:, :, r] = o['Fft']; Fkd[:, :, r] = o['Fkd']; Qnd[:, :, r] = o['Qnd']
+        Sf[:, r] = o['Sf']; Fk[:, r] = o['Fk']; Qn[:, r] = o['Qn']
+        Tb[:, r] = o['thbar']; Sg[:, r] = o['sigma']; Rf[:, r] = o['sign_ref']; var[r] = o['var_eta']
 
-    num_samples = slope_north.shape[1]
-    num_runs = 190
+    out = nc.Dataset(output_file, 'w')
+    out.description = ('E-PSS multi-aperture elevation directional spectra; sign '
+                       'resolved by S_f_theta 3-D-FFT anchor + onshore swell tiebreaker')
+    out.createDimension('frequency', nf); out.createDimension('direction', nd)
+    out.createDimension('wavenumber', nk); out.createDimension('inverse_phase_speed', nn)
+    out.createDimension('run', num_runs)
 
-    # PSS slope timeseries on disk are at 10 Hz (downsampled from 30 Hz).
-    sampling_rate_PSS = 10.0
-    water_depth_m = 15.0
+    def V(name, dims, data, **att):
+        v = out.createVariable(name, 'f4', dims, zlib=True, complevel=4); v[:] = data
+        for k, vv in att.items():
+            setattr(v, k, vv)
+    V('frequency', ('frequency',), freqs, units='Hz')
+    V('direction', ('direction',), th, units='degrees clockwise from true North')
+    V('wavenumber', ('wavenumber',), k_grid, units='rad/m')
+    V('inverse_phase_speed', ('inverse_phase_speed',), nu_grid, units='s/m')
+    V('F_f_d', ('frequency', 'direction', 'run'), Fft, units='m^2/Hz/rad')
+    V('F_k_d', ('wavenumber', 'direction', 'run'), Fkd, units='m^2/(rad/m)/rad')
+    V('Q_nu_d', ('inverse_phase_speed', 'direction', 'run'), Qnd, units='m^2/(s/m)/rad')
+    V('S_f', ('frequency', 'run'), Sf, units='m^2/Hz')
+    V('F_k', ('wavenumber', 'run'), Fk, units='m^2/(rad/m)')
+    V('Q_nu', ('inverse_phase_speed', 'run'), Qn, units='m^2/(s/m)')
+    V('mean_direction', ('frequency', 'run'), Tb, units='deg CW-from-N')
+    V('directional_spread', ('frequency', 'run'), Sg, units='deg')
+    V('sign_reference', ('frequency', 'run'), Rf, units='deg CW-from-N')
+    V('variance', ('run',), var, units='m^2')
+    out.close()
+    print(f"Done. Wrote {output_file} ({len(results)} runs; 137-140 NaN-flagged).")
 
-    # EWDM analysis band (integer octaves: 2**omin..2**omax Hz).
-    # omin=-5 -> ~0.031 Hz; omax=0 -> 1 Hz.
-    ewdm_omin = -5
-    ewdm_omax = 0
-    ewdm_nvoice = 16
 
-    # trim_EPSS_dirspec ambiguity-resolution band
-    fmin = 5e-2
-    fmax = 6e-1
-    theta_halfwidth = 90
-    smoothnum = 3
-
-    t_s = np.arange(num_samples) / sampling_rate_PSS
-
-    # Probe the output frequency / direction grids on the first run, then
-    # allocate the per-run stack.
-    F_EPSS_stack = None
-    Ff_stack = None
-    D_stack = None
-    freq_axis = None
-    dir_axis = None
-    dir_reorder = None
-
-    for run_ind in np.arange(0, num_runs):
-
-        sE = slope_east[run_ind, :]
-        sN = slope_north[run_ind, :]
-        sE = np.where(np.isfinite(sE), sE, 0.0)
-        sN = np.where(np.isfinite(sN), sN, 0.0)
-
-        # 0.08 Hz gentle high-pass on the elevation inference (sets eta_var,
-        # the directional-spectrum energy normalization below).
-        elev_m = slope_to_elev_wavelet(
-            sE, sN, water_depth_m, sampling_rate_PSS, fmin_Hz=0.08,
-        )
-        # slope_to_elev_wavelet may return one fewer sample if N is odd; pad
-        # back to keep the time coord aligned with the raw slopes.
-        if elev_m.size != num_samples:
-            elev_m = np.concatenate([elev_m, [elev_m[-1]]])[:num_samples]
-
-        ds_triplet = xr.Dataset(
-            data_vars={
-                "eastward_slope": ("time", sE.astype(float)),
-                "northward_slope": ("time", sN.astype(float)),
-                "surface_elevation": ("time", elev_m.astype(float)),
-            },
-            coords={"time": t_s},
-            attrs={"sampling_rate": sampling_rate_PSS},
-        )
-
-        # Time coord is float seconds, not datetime64 - skip the upstream
-        # interpolate_na step (its max_gap="10s" requires datetime time).
-        # NaNs are already filled with 0 above.
-        spec = ewdm.Triplets(ds_triplet, fs=sampling_rate_PSS, interpolate=False)
-        out = spec.compute(
-            omin=ewdm_omin, omax=ewdm_omax, nvoice=ewdm_nvoice,
-            dd=5.0, use="slopes",
-        )
-
-        if dir_reorder is None:
-            dir_axis, dir_reorder = _ewdm_dirs_to_cw_from_N(
-                out["direction"].data
-            )
-            freq_axis = out["frequency"].data
-            num_f = freq_axis.size
-            num_dirs = dir_axis.size
-            F_EPSS_stack = np.full((num_f, num_dirs, num_runs), np.nan)
-            Ff_stack = np.full((num_f, num_runs), np.nan)
-            D_stack = np.full((num_f, num_dirs, num_runs), np.nan)
-
-        # Reindex direction onto CW-from-N convention.
-        E_arr = out["directional_spectrum"].data[:, dir_reorder]
-        D_arr = out["directional_distribution"].data[:, dir_reorder]
-        S_arr = out["frequency_spectrum"].data
-
-        F_EPSS = xr.DataArray(
-            E_arr,
-            coords={"frequency": freq_axis, "direction": dir_axis},
-            dims=("frequency", "direction"),
-        )
-
-        F_EPSS = trim_EPSS_dirspec(F_EPSS, theta_halfwidth, fmin, fmax, smoothnum)
-
-        # Normalize so the total elevation energy equals var(eta_long_band).
-        # The wavelet eta reconstruction already targets that variance; here we
-        # just renormalize the trimmed spectrum to match var(eta) over the
-        # analysis band, matching the previous pipeline's convention.
-        eta_var = float(np.var(elev_m))
-        spec_total = float(
-            F_EPSS.integrate('frequency').integrate('direction')
-        )
-        if spec_total > 0 and np.isfinite(spec_total):
-            F_EPSS = F_EPSS * (eta_var / spec_total)
-
-        F_EPSS_stack[:, :, run_ind] = F_EPSS.data
-        Ff_stack[:, run_ind] = S_arr
-        D_stack[:, :, run_ind] = D_arr
-
-    F_EPSS_ds = xr.Dataset(
-        coords={
-            "frequency": freq_axis,
-            "direction": dir_axis,
-            "run number": np.arange(num_runs),
-        },
-        data_vars={
-            "F_f_d": (["frequency", "direction", "run"], F_EPSS_stack),
-            "F_f": (["frequency", "run"], Ff_stack),
-            "D_f_d": (["frequency", "direction", "run"], D_stack),
-        },
-        attrs={
-            "units": "m^2/Hz/deg",
-            "method": "E-PSS slope -> EWDM Triplets(use='slopes')",
-        },
-    )
-
-    F_EPSS_ds['frequency'].attrs = {'units': 'Hz'}
-    F_EPSS_ds['direction'].attrs = {'units': 'degrees clockwise from true North'}
-    F_EPSS_ds['run number'].attrs = {'units': 'sequential run number'}
-    F_EPSS_ds['F_f_d'].attrs = {
-        'units': 'm^2/Hz/deg',
-        'description': 'Frequency-directional spectrum (post ambiguity trim)',
-    }
-    F_EPSS_ds['F_f'].attrs = {
-        'units': 'm^2/Hz',
-        'description': 'EWDM frequency spectrum S(f) before trim',
-    }
-    F_EPSS_ds['D_f_d'].attrs = {
-        'units': '1/deg',
-        'description': 'EWDM directional distribution D(f, theta)',
-    }
-
-    F_EPSS_ds.to_netcdf(output_file_name)
-
-    print("Done computing frequency-directional spectra via E-PSS/EWDM!")
+if __name__ == '__main__':
+    main()

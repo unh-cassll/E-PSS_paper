@@ -1,8 +1,6 @@
-"""
-Created on Wed Sep 17 07:58:12 2025
-
-@author: nathanlaxague
-"""
+# Plot comparison of directional wave information (MWD and directional spreading)
+# between ADCP (MEM) and E-PSS (EWDM) estimates. Binned by U10.
+# @author: nathanlaxague
 
 import numpy as np
 import xarray as xr
@@ -22,7 +20,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 g = 9.81;
@@ -100,7 +97,7 @@ for run_ind in np.arange(0,num_runs):
         
     Fftheta_m2_Hz_rad_ADCP_particular = bigFftheta[:,inds_keep]
     
-    # creating dataset (ADCP spectrum)
+    # Build xarray dataset for ADCP directional spectrum
     dataset_ADCP = xr.Dataset(
         coords = {"frequency": f_Hz_ADCP, "direction": theta_deg_ADCP},
         data_vars = {
@@ -167,10 +164,10 @@ omega_EPSS = 2*np.pi*Tm01_EPSS**-1
 C_m_s_disp_ADCP, _ = lindisp_with_current(omega_ADCP,h_m_ADCP,0)
 C_m_s_disp_EPSS, _ = lindisp_with_current(omega_EPSS,h_m_ADCP,0)
 
-# Account for wave refraction (coastline is approximately East-West, so MWD is already shore-relative)
+# Refract ADCP MWD from 18.3 m to 15 m depth (coastline ~E-W)
 MWD_ADCP_shifted = np.asin(C_m_s_disp_EPSS/C_m_s_disp_ADCP*np.sin(MWD_ADCP*np.pi/180))*180/np.pi
 
-# Unwrap angular differences arising from 180 degree ambiguity
+# Fold MWD_EPSS into [-90, 90] to resolve 180° ambiguity
 inds_northerly = MWD_EPSS < -90
 MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] + 180
 inds_northerly = MWD_EPSS > 90
@@ -179,7 +176,7 @@ MWD_diff = MWD_EPSS-MWD_ADCP_shifted
 
 metrics = {}
 
-# Compute relevant statistics comparing MWD estimates from ADCP and E-PSS
+# MAE and RMSE for MWD: ADCP vs. E-PSS
 x = MWD_ADCP_shifted
 y = MWD_EPSS
 inds_keep = (~np.isnan(x) & ~np.isnan(y))
@@ -229,7 +226,7 @@ SPREAD_peak = np.nan*np.ones((num_runs,2))
 SPREAD_peak[:,0] = SPREAD_ADCP_peak
 SPREAD_peak[:,1] = SPREAD_EPSS_peak
 
-# Compute relevant statistics comparing spreading estimates from ADCP and E-PSS
+# MAE and RMSE for directional spreading: ADCP vs. E-PSS
 x = SPREAD_ADCP_peak
 y = SPREAD_EPSS_peak
 inds_keep = (~np.isnan(x) & ~np.isnan(y))
@@ -255,8 +252,8 @@ axs[0].set_xlabel('f [Hz]')
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$\circ$]')
 axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.75,82.5,r'$f_E$',color=color_list[2])
 
-axs[0].grid(which='major', linestyle='-', linewidth=0.75)  # Major gridlines with solid linestyle
-axs[0].grid(which='minor', linestyle=':', linewidth=0.75)  # Minor gridlines with dotted linestyle
+axs[0].grid(which='major', linestyle='-', linewidth=0.75)
+axs[0].grid(which='minor', linestyle=':', linewidth=0.75)
 
 for n in np.arange(2):
     

@@ -1,11 +1,8 @@
 """
-Compute per-run omnidirectional elevation spectra for the three E-PSS gain
-treatments (no/lab/empirical) and for the Riegl lidar reference. The slope to
-elevation step uses the wavelet inversion (slope_to_elev_wavelet).
+Compute per-run omnidirectional elevation spectra for E-PSS gain treatments
+(no/lab/empirical) and the Riegl lidar reference. Units: m^2/Hz.
 
-Created: 2025-11-15
-Refactored to upstream: 2026-05-29
-
+Created: 2025-11-15; refactored: 2026-05-29
 @author: nathanlaxague
 """
 
@@ -56,8 +53,7 @@ else:
     nperseg = 1500
     num_freqs = np.int16(nfft / 2 + 1)
     num_runs = np.size(elev_m_lidar, axis=2)
-    # Both the PSS slope timeseries (originally 30 Hz) and the Riegl lidar
-    # are stored on disk at 10 Hz; the slopes were downsampled by 3 upstream.
+    # PSS slopes (originally 30 Hz) and Riegl lidar stored at 10 Hz; slopes downsampled 3x upstream.
     sampling_rate_PSS = 10.0
     sampling_rate_lidar = 10.0
     num_lidars = 3

@@ -1,8 +1,6 @@
-"""
-Created on Tue Sep 16 19:45:25 2025
-
-@author: nathanlaxague
-"""
+# Plot omnidirectional elevation and saturation spectra in frequency and wavenumber,
+# binned by U10. Combines E-PSS (low-f) and slope-field (high-f) estimates.
+# @author: nathanlaxague
 
 import numpy as np
 import xarray as xr
@@ -19,7 +17,6 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
 warnings.filterwarnings("ignore")
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
@@ -86,9 +83,7 @@ T_s = f_Hz**-1
 T_s_slope = f_Hz_slope**-1
 h_m = 15
 
-# Upstream lindisp_with_current returns (phase_speed, wavenumber). Group
-# velocity is derived here from the gravity-only deep/intermediate water
-# form (surface tension contribution is negligible at these wavenumbers).
+# Phase speed and group velocity via linear dispersion at h=15 m
 C_m_s_disp, k_rad_m_disp = lindisp_with_current(2*np.pi*f_Hz,h_m,0)
 Cg_m_s_disp = C_m_s_disp/2 * (1 + (2*k_rad_m_disp*h_m) / np.sinh(2*k_rad_m_disp*h_m))
 
@@ -109,7 +104,7 @@ B_f_binned = np.reshape(k_rad_m_disp,(1,len(k_rad_m_disp)))**2*np.reshape(f_Hz,(
 cmap = plt.get_cmap('cividis')
 color_min = np.min(U_centers)
 color_max = np.max(U_centers)    
-colors = [cmap(j) for j in np.linspace(0,1, len(U_centers))]  # Get colors from the colormap
+colors = [cmap(j) for j in np.linspace(0,1, len(U_centers))]
 
 f_lims = [1e-2,2e1]
 Ff_lims = [1e-10,1e1]
@@ -202,7 +197,7 @@ for i in np.arange(len(U_centers)):
 axs[1,0].set_xlabel('f [Hz]')
 axs[1,1].set_xlabel(r'k [rad m$^{-1}$]')
 
-# Stick ticklabels/axis labels of right two subplots on right side of figure
+# Move right-column y-axis labels and ticks to right side
 axs[0,1].yaxis.set_label_position("right")
 axs[0,1].yaxis.tick_right()
 axs[1,1].yaxis.set_label_position("right")
@@ -212,8 +207,8 @@ counter = 0
     
 for i in np.arange(2):
     for j in np.arange(2):
-        axs[i,j].grid(which='major', linestyle='-', linewidth=0.75)  # Major gridlines with solid linestyle
-        axs[i,j].grid(which='minor', linestyle=':', linewidth=0.75)  # Minor gridlines with dotted linestyle
+        axs[i,j].grid(which='major', linestyle='-', linewidth=0.75)
+        axs[i,j].grid(which='minor', linestyle=':', linewidth=0.75)
         
         axs[i,j].text(0.05,0.95,panel_labels[counter],fontsize=fsize,ha='center',va='center',transform=axs[i,j].transAxes)
         counter = counter + 1

@@ -1,6 +1,7 @@
 """
-Created on Thu Oct  9 15:50:13 2025
+Plot field-measured DoLP vs. AOI curves for overcast and cloudless sky conditions.
 
+Created: 2025-10-09
 @author: nathanlaxague
 """
 
@@ -17,7 +18,7 @@ color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
-# Suppress all warnings
+# Suppress warnings
 warnings.filterwarnings("ignore")
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
