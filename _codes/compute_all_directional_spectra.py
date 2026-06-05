@@ -19,8 +19,16 @@ warnings.filterwarnings("ignore")
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 path = '../_data/'
-output_file = path + 'ASIT2019_EPSS_directional_spectra.nc'
-fs, water_depth_m, num_samples, num_runs = 10.0, 15.0, 4096, 190
+# input slope fields and output spectra are overridable via env vars (defaults
+# unchanged) so a re-normalized slope-field run can be produced alongside the original
+slope_field_file = path + os.environ.get('EPSS_FLD', 'ASIT2019_slope_fields_reduced.nc')
+output_file = path + os.environ.get('EPSS_OUT', 'ASIT2019_EPSS_directional_spectra.nc')
+fs, water_depth_m, num_samples, num_runs = 10.0, 15.0, 6000, 190
+# de-piston cut wavelength as a multiple of the frame size (n*L); larger n = more
+# aggressive de-piston. Krogstad long-wave slope averaged over a centered disc of
+# this diameter [px]. Overridable per sweep member.
+depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 2.0))
+krog_disc = int(os.environ.get('EPSS_KROG_DISC', 32))
 
 # fixed grids (dx constant: 2.915 m / 32 px)
 dx = 2.915 / 32
@@ -39,7 +47,7 @@ _DS = {}
 
 def _ds():
     if not _DS:
-        _DS['fld'] = nc.Dataset(path + 'ASIT2019_slope_fields_reduced.nc')
+        _DS['fld'] = nc.Dataset(slope_field_file)
         _DS['ref'] = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
     return _DS
 
@@ -57,10 +65,16 @@ def work(run_ind):
     sn = np.ma.filled(d['fld']['slope_north'][run_ind][..., :num_samples], np.nan)
     if not np.isfinite(se).any():                        # NaN-flagged (corrupt) run
         return run_ind, None
-    eta, _ = build_eta_field(np.nan_to_num(se).astype(float),
-                             np.nan_to_num(sn).astype(float), water_depth_m, fs)
+    # gated de-piston: build_eta_field also returns the solve field with the
+    # uniform long-wave piston removed above 0.75*f_FOV, so the FOV-scale |k|
+    # solve is not biased low. slope_blend off; lo_frac/apertures from defaults.
+    eta, _, eta_solve = build_eta_field(np.nan_to_num(se).astype(float),
+                                        np.nan_to_num(sn).astype(float),
+                                        water_depth_m, fs,
+                                        krog_disc=krog_disc, depiston_n=depiston_n)
     M = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, water_depth_m, fs,
                               apertures=default_apertures(), n_staff=16,
+                              solve_eta=eta_solve,
                               sign_anchor=sftheta_sign_anchor(d['ref'], run_ind))
     Fft, Fkd, Qnd = M['Fft'], M['Fkd'], M['Qnd']
     thbar, sigma, ref = M['thbar'], M['sigma'], M['sign_ref']
@@ -87,7 +101,7 @@ def main():
     if Path(output_file).exists():
         print(f"File already exists: {output_file}")
         return
-    nw = min(8, (os.cpu_count() or 4) - 1)
+    nw = int(os.environ.get('EPSS_NWORKERS', min(8, (os.cpu_count() or 4) - 1)))
     print(f"Computing E-PSS multi-aperture directional spectra ({num_runs} runs, {nw} workers)...")
     results = {}
     with ProcessPoolExecutor(max_workers=nw) as ex:

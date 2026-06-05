@@ -82,6 +82,18 @@ theta_halfwidth = 120
 
 f_cut_low = 0.03
 f_cut_high = 0.4
+f_cut_high_EPSS = 0.7          # E-PSS directional spreading trusted to higher f than MWD/Tm01
+
+# Trusted frequency band for sigma_theta(f) display: faded below the shared low
+# bound f_low; E-PSS solid above it, ADCP solid only up to f_ADCP_trust_high (faded
+# beyond). f_low matches plot_binned_omnispect (waves shorter than 73x the camera
+# FOV, finite-depth dispersion at h = 15 m).
+f_ADCP_trust_high = 0.25
+L_FOV_m = 2.915
+n_frame_low = 73
+k_low = 2*np.pi/(n_frame_low*L_FOV_m)
+f_low = np.sqrt(g*k_low*np.tanh(k_low*water_depth_m))/(2*np.pi)
+alpha_faded = 0.30             # opacity of each estimate beyond its trusted band
 
 f_Hz_copy = f_Hz_omni.copy()
 f_Hz_copy[0] = np.nan
@@ -116,20 +128,35 @@ for run_ind in np.arange(0,num_runs):
     Ff_EPSS[run_ind,:] = F_EPSS.integrate('direction')
     
     inds_exclude = (F_ADCP["frequency"].data > f_cut_high) | (F_ADCP["frequency"].data < f_cut_low)
+
+    # ADCP directional spreading is shown to its lower frequency limit (high cut
+    # only); MWD/Tm01/peak below keep the standard band [f_cut_low, f_cut_high].
+    F_ADCP_spread = F_ADCP.copy(deep=True)
+    F_ADCP_spread.data[F_ADCP_spread["frequency"].data > f_cut_high,:] = 0
+
     F_ADCP.data[inds_exclude,:] = 0
 
     inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
     F_EPSS.data[inds_exclude,:] = 0
-               
-    mwd_EPSS, spread_EPSS = compute_mean_wave_direction_and_spreading(F_EPSS,theta_halfwidth,smoothnum)
+
+    mwd_EPSS, _ = compute_mean_wave_direction_and_spreading(F_EPSS,theta_halfwidth,smoothnum)
     MWD_EPSS[run_ind] = mwd_EPSS*-1+90
+
+    # sigma_theta(f) is trusted to a higher frequency than MWD/Tm01; recompute the
+    # directional spreading on the extended band [f_cut_low, f_cut_high_EPSS] from the
+    # spectrum prior to the standard high-frequency cut (leaves MWD/Tm01 unchanged).
+    F_EPSS_spread = ds_EPSS_spect['F_f_d'][:,:,run_ind].copy(deep=True)
+    inds_exclude_spread = (F_EPSS_spread["frequency"].data > f_cut_high_EPSS) | (F_EPSS_spread["frequency"].data < f_cut_low)
+    F_EPSS_spread.data[inds_exclude_spread,:] = 0
+    _, spread_EPSS = compute_mean_wave_direction_and_spreading(F_EPSS_spread,theta_halfwidth,smoothnum)
     SPREAD_EPSS[run_ind,:] = spread_EPSS
     
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
     
     if total_energy > 0:
-        mwd_ADCP, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP,theta_halfwidth,smoothnum)
-        
+        mwd_ADCP, _ = compute_mean_wave_direction_and_spreading(F_ADCP,theta_halfwidth,smoothnum)
+        _, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP_spread,theta_halfwidth,smoothnum)
+
         Ff_ADCP = F_ADCP.integrate('direction').data
         f_E_ADCP = np.sum(Ff_ADCP)/np.sum(f_Hz_ADCP**-1*Ff_ADCP)
         f_diff = np.abs(f_E_ADCP-f_Hz_ADCP)
@@ -239,9 +266,25 @@ run_ind = 162
 spread_ADCP = SPREAD_ADCP[run_ind,:]
 spread_EPSS = SPREAD_EPSS[run_ind,:]
 
+def plot_split(ax, x, y, lo, hi, label):
+    # Draw y(x) solid within the trusted band [lo, hi] (hi=None for no upper bound)
+    # and faded outside it; each faded segment overlaps the solid region by a point.
+    x = np.asarray(x)
+    solid = np.ones(len(x), bool)
+    if lo is not None: solid &= x >= lo
+    if hi is not None: solid &= x <= hi
+    line, = ax.plot(x, np.where(solid, y, np.nan), label=label, linewidth=2)
+    if solid.any():
+        i0, i1 = np.where(solid)[0][[0, -1]]
+        faded = []
+        if i0 > 0: m = np.zeros(len(x), bool); m[:i0+1] = True; faded.append(m)
+        if i1 < len(x)-1: m = np.zeros(len(x), bool); m[i1:] = True; faded.append(m)
+        for fm in faded:
+            ax.plot(x, np.where(fm, y, np.nan), color=line.get_color(), linewidth=2, alpha=alpha_faded)
+
 fig,axs = plt.subplots(1,2,figsize=(fullwidth,fullwidth*0.4))
-axs[0].plot(F_ADCP["frequency"],spread_ADCP,label="ADCP",linewidth=2)
-axs[0].plot(F_EPSS["frequency"],spread_EPSS,label="E-PSS",linewidth=2)
+plot_split(axs[0], F_ADCP["frequency"], spread_ADCP, f_low, f_ADCP_trust_high, "ADCP")
+plot_split(axs[0], F_EPSS["frequency"], spread_EPSS, f_low, None, "E-PSS")
 axs[0].plot(f_Hz[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90])
 axs[0].set_xscale('log')
 axs[0].set_yticks(np.arange(0,360,15))

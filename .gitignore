@@ -16,6 +16,9 @@ _figures/*.pdf
 # Ignore .nc files in the _data/ folder
 _data/*.nc
 
+# Ignore the contents of _dustbin/
+_dustbin/*
+
 # Ignore robot bits
 .venv
 .claude

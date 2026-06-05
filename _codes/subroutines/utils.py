@@ -367,7 +367,12 @@ def slope_to_elev_wavelet(
     eta = _ewdm_icwt(W_eta, freqs=freqs, fs=fs_Hz, per_scale=per_scale)
     eta = np.asarray(eta, dtype=float)
 
-    # Up-positive sign handled upstream (epss commit 852ee94); no correction needed
+    # Up-positive sign handled upstream in krogstad_eta_coeffs (+1j convention,
+    # verified against the synthetic unit-cosine test and the ASIT2019 lidar);
+    # no correction needed. NB epss commit 852ee94 had inverted this and was
+    # reverted -- the elevation sign is blind to the directional-spectrum
+    # validations here (spectra/Hm0 are quadratic), so only a waveform check
+    # constrains it.
 
     if window_power_correct:
         eta = eta / np.sqrt(np.mean(w ** 2))
