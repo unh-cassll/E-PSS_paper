@@ -15,8 +15,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Zenodo base URL and target filenames
-URL = "https://zenodo.org/records/18881301/files/"
-filenames_to_grab = ["ASIT2019_supporting_environmental_observations.nc", "ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_no_gain.nc","ASIT2019_EPSS_directional_spectra.nc","ASIT2019_omnidirectional_spectra.nc","slope_statistics_dataset.nc", "Elfouhaily_et_al_1997_cumulative_mss.nc", "Piermont2025_DoLP_AoI_observations.nc", "Run051_example_Stokes_parameters.nc"]
+URL = "https://zenodo.org/records/20566556/files/"
+filenames_to_grab = ["ASIT2019_supporting_environmental_observations.nc", "ASIT2019_slope_fields_reduced.nc", "ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc", "ASIT2019_wave_spectra_stats_timeseries_no_gain.nc","ASIT2019_EPSS_directional_spectra.nc","ASIT2019_omnidirectional_spectra.nc","aperture_field_stitch.nc","Elfouhaily_et_al_1997_cumulative_mss.nc", "Piermont2025_DoLP_AoI_observations.nc", "Run051_example_Stokes_parameters.nc"]
 suffix = "?download=1"
 
 local_dir = '_data'
