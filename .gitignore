@@ -25,5 +25,6 @@ _dustbin/*
 
 # Ignore robot bits
 .venv
+.vscode
 .claude
 
