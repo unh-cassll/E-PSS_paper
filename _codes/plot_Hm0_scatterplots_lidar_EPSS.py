@@ -86,6 +86,14 @@ slope_values = [metrics['none'][2], metrics['lab'][2], metrics['empirical'][2]]
 offset_values = [metrics['none'][3], metrics['lab'][3], metrics['empirical'][3]]
 colors = ['#4C2882', '#367588', '#A52A2A']
 
+# Export the empirical-gain headline metrics as LaTeX macros for paper.tex
+write_tex_macros('Hm0_values.tex', {
+    'HmRtwoEmp':  f'{r2_values[2]:.2f}',
+    'HmRMSEemp':  f'{rmse_values[2]:.2f}',
+    'HmSlopeEmp': f'{slope_values[2]:.2f}',
+    'HmBiasEmp':  f'{offset_values[2]:.2f}',
+}, source='plot_Hm0_scatterplots_lidar_EPSS.py')
+
 r2_line = 'R²'
     
 rmse_line = 'RMSE'
@@ -97,16 +105,16 @@ offset_line = 'bias'
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((0.05, 2.2), 2.0, 0.75, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((0.05, 2.2), 2.0, 0.75, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((0.04, 2.14), 2.07, 0.83, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((0.04, 2.14), 2.07, 0.83, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 # Metrics textbox (axes-fraction coordinates)
 x_position = 0.02
 y_position = 0.93
 delta_x = [0.03,0.03,0.04]
-plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize,
         verticalalignment='top')
-plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize,
         verticalalignment='top')
         
 x_position_start = x_position
@@ -114,25 +122,19 @@ x_position_start = x_position
 proxy_labels = proxy_estimates.copy()
 proxy_labels[2] = 'emp'
 
-# Per-category metric columns
+# Per-category metric columns (each a single multi-line string so the rows share
+# the label/'=' line spacing and stay aligned down the column)
 x_position += 0.05
 for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_labels, delta_x):
     x_position += 0.15
-    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize,
              verticalalignment='top',horizontalalignment='center')
-    plt.text(x_position, y_position, f'{r2:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.049, f'{rmse:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.098, f'{slope:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
+    plt.text(x_position, y_position, f'{r2:.2f}\n{rmse:.2f}\n{slope:.2f}\n{offset:.2f}', color=color,
+             transform=plt.gca().transAxes, fontsize=fsize, verticalalignment='top')
 
 x_position += 0.12
-plt.text(x_position, y_position-0.049, 'm', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
-         verticalalignment='top')
-plt.text(x_position, y_position-0.147, 'm', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
+# units on the dimensional rows (RMSE, bias); blank lines preserve the row spacing
+plt.text(x_position, y_position, '\nm\n\nm', color='k', transform=plt.gca().transAxes, fontsize=fsize,
          verticalalignment='top')
     
 plt.xticks(np.linspace(0,3,7))

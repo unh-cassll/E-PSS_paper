@@ -41,6 +41,8 @@
 
 \hyphenation{op-tical net-works semi-conduc-tor}
 
+% inputs which contain data from processing phase
+\input{_tex/Hm0_values.tex}
 
 \begin{document}
 %
@@ -57,7 +59,7 @@
 	\thanks{Manuscript received XXX; revised YYY.}}
 
 % The paper headers
-\markboth{IEEE Transactions on Geoscience and Remote Sensing,~Vol.~XX, No.~YY, \monthyeardate\today}%
+\markboth{IEEE Journal of Oceanic Engineering,~Vol.~XX, No.~YY, \monthyeardate\today}%
 {Laxague \MakeLowercase{\textit{et al.}}: Subpixel Variability and Polarimetric Slope Sensing}
 
 % make the title area
@@ -124,15 +126,6 @@ Even under pristine laboratory conditions, a polarimeter may not perform ideally
 
 This calibration is an important first step, though it will not account for variability in the ambient illumination conditions. We demonstrate an empirical approach to accounting for variability in upwelling/downwelling radiance in Figure \ref{fig:DoLP_AOI_gain_example}. The violet curve in the top panel represents the relationship between DoLP and $\theta_i$ which would arise due to unpolarized sky living radiance and no upwelling radiance. The gold segment on that panel correseponds to the observed variation of DoLP from the bottom to the top of the image frame as averaged over a single ten-minute period. The range of $\theta_i$ is obtained directly from the known mounting geometry of the instrument and the vertical angle of view for the camera-lens combination (here 30$^{\circ}\pm$2.7$^{\circ}$ for a 75 mm lens).
 
-\begin{figure*}[!ht]
-	\centering
-	\includegraphics[width=\textwidth]{_figures/wave_slope_elev_timeseries.pdf}
-	\vspace{-20pt}
-	\caption{Temporal variation of east and north wave slope ($s_E$ \& $s_N$, respectively) along with the corresponding water surface elevation $\eta$ computed via the Fourier space inversion approach of equation \ref{eq:slope_inversion}.}
-	\vspace{-15pt}
-	\label{fig:wave_slope_elev_timeseries}
-\end{figure*}
-
 A corresponding snapshot of the full-frame DoLP is given in the bottom left panel, marked with a label of "raw". The \emph{empirical} gain is simply the value by which the frame-median DoLP needs to be scaled in order to yield the value expected for zero upwelling radiance and unpolarized sky-leaving radiance. After application of the empirical gain to the time-averaged DoLP, we obtain the red segment in the top panel. When that gain value is applied to the DoLP snapshot, we obtain the field shown in the bottom right panel.
 
 Absent supporting independent information regarding upwelling and sky-leaving radiance, this empirical approach seems to be the most straightforward: the known orientation of the camera defines the slope reference on a case-by-case basis. Nevertheless, it is important that we demonstrate the positive impact of this approach. The best way to accomplish this would be to have a secondary measurement that could act as a gold standard; however, the principal benefit of PSS is that it is the sole established technique for field observations of short to intermediate-scale ocean waves. During the Fall and Winter of 2019-2020, a set of targeted measurements of wind forcing, surface waves, and near-surface currents were made at the Air-Sea Interaction Tower (ASIT) just south of Martha's Vineyard, MA \cite{laxague_effects_2025}. As part of this campaign (hereinafter "ASIT2019"), we obtained wind speed and turbulent fluxes along with the water surface elevation time series via near-infrared LiDAR. For some observational cases, we also obtained the frequency-directional wave spectrum via bottom-mounted ADCP. In order to demonstrate the efficacy of the empirical gain approach, we will compare the wave height and energy-weighted mean wave period obtained via LiDAR measurements to the same quantities inferred from surface slope field measurements.
@@ -159,12 +152,12 @@ This inversion follows directly from small-amplitude water wave theory, analogou
 
 \vspace{-10pt}
 
-A demonstration of this approach is presented in Figure \ref{fig:wave_slope_elev_timeseries}. The east and north oriented slope components are provided as dashed and dotted curves, respectively, while the red trace indicates the resulting water surface elevation time series $\eta$ inferred from the slope time series. The corresponding omnidirectional frequency spectra are provided in Figure \ref{fig:elevation_omnispect}. Note that the frame size of $L\approx$ 3 m limits the proper frequency response above 0.35 Hz (wavelength $\approx$ $4L$).
+A demonstration of this approach is presented in Figure \textcolor{red}{GONE}. The east and north oriented slope components are provided as dashed and dotted curves, respectively, while the red trace indicates the resulting water surface elevation time series $\eta$ inferred from the slope time series. The corresponding omnidirectional frequency spectra are provided in Figure \ref{fig:elevation_omnispect}. Note that the frame size of $L\approx$ 3 m limits the proper frequency response above 0.35 Hz (wavelength $\approx$ $4L$).
 		
 \section{Results}
 \label{sec:results}
 
-From this point forward, we use the acronym E-PSS (Extended Polarimetric Slope Sensing) to describe a combination of (1) polarimetric slope sensing with a laboratory or empirically-based modification to the DoLP($\theta_i$) relationship and (2) the estimation of surface elevation via Fourier space inversion of the slope time series. As shown in Figure \ref{fig:mueller_calc_example}b, unpolarized sky-leaving radiance will elevate the lowest degree of linear polarization that will be observed from a downward-looking imaging polarimeter. However, we did not find there be an elevated floor the measurements of DoLP made over a range of ambient conditions (full sun to full overcast) during the 2019-2020 ASIT field campaign. To be specific, we found frequent occurrence of low ($<$0.1) values of DoLP for all ambient illumination conditions, indicating that variability in sky-leaving polarization state is likely to be of secondary importance for PSS. However, given the somewhat large values of empirical DoLP gain (1.2-1.7) used during our field observations, upwelling radiance should not be neglected. This is consistent with previous studies of upwelling radiance \cite{You2011,ibrahim_relationship_2012}. When one compares this range of DoLP gain values to the Fresnel curves plotted in Figure \ref{fig:mueller_calc_example}a, we infer that for the ASIT2019 observations which passed our quality control, less than 10\% of the radiance received by our imaging polarimeter was unpolarized, upwelling radiance. Nevertheless, the existence of any such variation indicates that an approach which allows for a dynamic gain (e.g., our empirical approach) to have a significant advantage over the static laboratory-based calibration. The benefit of using an empirical gain approach is demonstrated in the scatter plot of Figure \ref{fig:Hm0_comparison_lidar_epss}, wherein we compare the significant wave height computed from LiDAR and E-PSS-derived wave spectra. We compute the significant wave height as four times the square root of the zeroth moment of the wave spectrum, $H_{m0}=4\times\Big(\int_0^\infty F(f)~\mathrm{d}f\Big)^{1/2}$. The figure legend contains pieces of key statistical information about the comparison between LiDAR and E-PSS estimates. The no-gain and laboratory-gain approaches provide significant wave heights which are substantially lower than those produced from the LiDAR measurements. However, the $H_{m0}$ estimates produced via empirical gain approach are appropriately close to those obtained by LiDAR: $R^2\approx$ 0.75, RMSE $\approx$ 33 cm, and a fit slope of 0.94, indicating nearly one-to-one response.
+From this point forward, we use the acronym E-PSS (Extended Polarimetric Slope Sensing) to describe a combination of (1) polarimetric slope sensing with a laboratory or empirically-based modification to the DoLP($\theta_i$) relationship and (2) the estimation of surface elevation via Fourier space inversion of the slope time series. As shown in Figure \ref{fig:mueller_calc_example}b, unpolarized sky-leaving radiance will elevate the lowest degree of linear polarization that will be observed from a downward-looking imaging polarimeter. However, we did not find there be an elevated floor the measurements of DoLP made over a range of ambient conditions (full sun to full overcast) during the 2019-2020 ASIT field campaign. To be specific, we found frequent occurrence of low ($<$0.1) values of DoLP for all ambient illumination conditions, indicating that variability in sky-leaving polarization state is likely to be of secondary importance for PSS. However, given the somewhat large values of empirical DoLP gain (1.2-1.7) used during our field observations, upwelling radiance should not be neglected. This is consistent with previous studies of upwelling radiance \cite{You2011,ibrahim_relationship_2012}. When one compares this range of DoLP gain values to the Fresnel curves plotted in Figure \ref{fig:mueller_calc_example}a, we infer that for the ASIT2019 observations which passed our quality control, less than 10\% of the radiance received by our imaging polarimeter was unpolarized, upwelling radiance. Nevertheless, the existence of any such variation indicates that an approach which allows for a dynamic gain (e.g., our empirical approach) to have a significant advantage over the static laboratory-based calibration. The benefit of using an empirical gain approach is demonstrated in the scatter plot of Figure \ref{fig:Hm0_comparison_lidar_epss}, wherein we compare the significant wave height computed from LiDAR and E-PSS-derived wave spectra. We compute the significant wave height as four times the square root of the zeroth moment of the wave spectrum, $H_{m0}=4\times\Big(\int_0^\infty F(f)~\mathrm{d}f\Big)^{1/2}$. The figure legend contains pieces of key statistical information about the comparison between LiDAR and E-PSS estimates. The no-gain and laboratory-gain approaches provide significant wave heights which are substantially lower than those produced from the LiDAR measurements. However, the $H_{m0}$ estimates produced via empirical gain approach are appropriately close to those obtained by LiDAR: $R^2\approx\HmRtwoEmp$, RMSE $\approx\HmRMSEemp$ m, and a fit slope of $\HmSlopeEmp$, indicating strong response.
 An analogous comparison is provided in Figure \ref{fig:T_E_comparison_lidar_epss}, where we show the mean wave period computed both from LIDAR and E-PSS measurements. The energy-weighted mean wave period ($T_{E}$) is defined in the following manner:
 \begin{align}
 	T_{E}\equiv\frac{m_{-1}}{m_0}=~ \frac{\int_0^\infty f^{-1}F(f)~\mathrm{d}f}{\int_0^\infty F(f)~\mathrm{d}f}
@@ -250,6 +243,30 @@ The joint PDF for upwind and crosswind wave slope was computed for all ASIT2019 
 
 ~\clearpage
 
+\begin{figure}[!ht]
+	\centering
+	\includegraphics[width=0.49\textwidth]{_figures/longwave_shortwave_demo_stacked.pdf}
+	\vspace{-20pt}
+	\caption{ASDF}
+	\label{fig:longwave_shortwave_demo_stacked}
+\end{figure}
+
+\newpage
+
+~\clearpage
+
+\begin{figure*}[!ht]
+	\centering
+	\includegraphics[width=\textwidth]{_figures/aperture_field_stitch.pdf}
+	\vspace{-20pt}
+	\caption{ASDF}
+	\label{fig:aperture_field_stitch}
+\end{figure*}
+
+\newpage
+
+~\clearpage
+
 \begin{figure*}[!ht]
 	\centering
 	\includegraphics[width=\textwidth]{_figures/omnidirectional_spectra_binned_by_wind.pdf}
@@ -270,7 +287,7 @@ The omnidirectional wave spectra obtained via E-PSS during ASIT2019 are shown in
 	\centering
 	\includegraphics[width=\textwidth]{_figures/directional_spectra_polar.pdf}
 	\vspace{-20pt}
-	\caption{Frequency-directional spectra computed via MEM given (a) the surface elevation/current profile measurements of the ADCP and (b) the measured two-component long wave slope and water surface elevation inferred via E-PSS. The black arrow indicates the wind direction ($U_{10}=$ 7.7 m s$^{-1}$) and the red arrow indicates the surface current direction ($U_{sfc}=$ 0.11 m s$^{-1}$, $z_{sfc}\approx$ 1 cm). Wave and current direction is provided in "going-to" convention, while wind direction follows the meteorological "coming-from" convention.}
+	\caption{Frequency-directional spectra computed via MEM given (a) the surface elevation/current profile measurements of the ADCP and (b) the measured two-component long wave slope and water surface elevation inferred via E-PSS. The red arrow indicates the wind direction ($U_{10}=$ 7.7 m s$^{-1}$).}
 	\label{fig:directional_spectra_polar}
 \end{figure*}
 
@@ -315,6 +332,18 @@ Given the frequency-directional spectrum $F(f,\theta)$, the wave directional dis
 	\caption{Spreading width $\sigma_\theta$, computed from $D(f,\theta)$ obtained from ADCP and E-PSS spectra following eq. \ref{eq:spreading_width} for (a) a single case and given in terms of frequency and (b) all cases, bin-averaged and evaluated at the energy-weighted mean frequency $f_E$; shaded regions mark 95\% confidence intervals about the mean.}
 	\label{fig:directional_spreading_comparison}
 \end{figure*}
+
+\begin{figure*}[!ht]
+	\centering
+	\includegraphics[width=\textwidth]{_figures/directional_spreading_binned_by_wind.pdf}
+	\vspace{-20pt}
+	\caption{ASDF}
+	\label{fig:directional_spreading_binned_by_wind}
+\end{figure*}
+
+\newpage
+
+~\clearpage
 
 The mean wave direction and directional spread may alternatively be computed from the first-order Fourier moments \cite{earle_nondirectional_2003}. However, we computed $\theta_0(f)$ and $\sigma_\theta(f)$ from the spectra themselves in order to maintain consistency between the ADCP and E-PSS estimates. This approach carries the additional benefit that it would also be usable with the "direct" frequency-directional spectra obtained from the wave slope fields themselves. However, we determined that the scale separation between the shortest waves resolved via E-PSS ($\approx$10 m) and the longest waves within our FOV from which we were able to obtain a reasonable wave direction estimate ($\approx$1 m) was sufficient to preclude a one-to-one comparison of those estimates. In Figure \ref{fig:delta_theta_nought}, we show the difference in mean wave direction $\Delta\theta_0$, with each $\theta_0$ computed via equation \ref{eq:mean_wave_direction} from both MEM directional spectra (ADCP and E-PSS). A direct intercomparison of mean wave direction estimates does strain our capability: there is a substantial spatial separation ($\approx$1 km laterally) between the ADCP mooring and ASIT. This separation does allow for a good deal of evolution in the wave field given wind forcing, wave-current interaction, or breaking. We did attempt to correct for simple wave refraction via Snell's law, though this correction appears to have been negligible: the ADCP mooring was on the 18.3-meter isobath while ASIT is on the 15-meter isobath. Equation \ref{eq:spreading_width} provides the means to compute the wave directional spreading width $\sigma_\theta(f)$. In Figure \ref{fig:directional_spreading_comparison}(a), we show an example $\sigma_\theta(f)$ computed from the spreading functions $D(f,\theta)$ obtained by ADCP and E-PSS for a particular run. The dark red vertical segment corresponds to the frequency the energy-weighted mean frequency, $f_E=m_{-1}/m_{0}$. In panel (b), we provide the bin averaged response of $\sigma_\theta(f_E)$ as a function of 10 meter wind speed $U_{10}$. We note that this downward trend in $\sigma_\theta$ with $U_{10}$ is a consequence of the development of the sea state (and therefore a decrease in $f_E$). Our focus is on the intercomparison of ADCP and E-PSS-obtained directional spreading; we leave further discussion of wind-wave development to another paper.
 

@@ -105,16 +105,16 @@ offset_line = 'bias'
 textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
 equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
 
-plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((0.014, 0.729), 0.629, 0.257, transform=plt.gca().transAxes, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
+plt.gca().add_patch(plt.Rectangle((0.012, 0.712), 0.651, 0.278, transform=plt.gca().transAxes, color='k', alpha=0.95, edgecolor='k',linewidth=2))
+plt.gca().add_patch(plt.Rectangle((0.012, 0.712), 0.651, 0.278, transform=plt.gca().transAxes, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
 
 # Metrics textbox (axes-fraction coordinates)
 x_position = 0.02
 y_position = 0.93
 delta_x = [0.03,0.03,0.04]
-plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize,
         verticalalignment='top')
-plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize,
         verticalalignment='top')
         
 x_position_start = x_position
@@ -122,31 +122,25 @@ x_position_start = x_position
 proxy_labels = proxy_estimates.copy()
 proxy_labels[2] = 'emp'
 
-# Per-category metric columns
+# Per-category metric columns (each a single multi-line string so the rows share
+# the label/'=' line spacing and stay aligned down the column)
 x_position += 0.05
 for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_labels, delta_x):
     x_position += 0.14
-    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
+    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize,
              verticalalignment='top',horizontalalignment='center')
-    plt.text(x_position, y_position, f'{r2:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.049, f'{rmse:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.098, f'{slope:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
-    plt.text(x_position, y_position-0.147, f'{offset:.2f}', color=color, transform=plt.gca().transAxes, fontsize=fsize*0.9,
-             verticalalignment='top')
+    plt.text(x_position, y_position, f'{r2:.2f}\n{rmse:.2f}\n{slope:.2f}\n{offset:.2f}', color=color,
+             transform=plt.gca().transAxes, fontsize=fsize, verticalalignment='top')
 
 x_position += 0.11
-plt.text(x_position, y_position-0.049, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
-         verticalalignment='top')
-plt.text(x_position, y_position-0.147, 's', color='k', transform=plt.gca().transAxes, fontsize=fsize*0.9,
+# units on the dimensional rows (RMSE, bias); blank lines preserve the row spacing
+plt.text(x_position, y_position, '\ns\n\ns', color='k', transform=plt.gca().transAxes, fontsize=fsize,
          verticalalignment='top')
     
-plt.xticks(np.linspace(4,12,9))
-plt.yticks(np.linspace(4,12,9))
-plt.xlim(4,9)
-plt.ylim(4,9)
+plt.xticks(np.linspace(3,12,10))
+plt.yticks(np.linspace(3,12,10))
+plt.xlim(3,10)
+plt.ylim(3,10)
 
 plt.xlabel(r'$T_{E}$, lidar [s]')
 plt.ylabel(r'$T_{E}$, E-PSS [s]')

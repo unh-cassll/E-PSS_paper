@@ -3,6 +3,7 @@ Project-specific helpers for the E-PSS paper.
 
     figure_style                          paper plot styling
     wind_speed_bins                       canonical fixed-width U10 bins
+    write_tex_macros                      LaTeX \newcommand value file for paper.tex
     mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
     compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier slope PDF
     fit_gram_charlier_slope_pdf           least-squares Gram-Charlier fit
@@ -40,7 +41,7 @@ from eta_field_recon.wavelet_core import (
 
 # Figure style function
 
-def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
+def figure_style(title_fontsize=10, label_fontsize=10, tick_fontsize=10):
 
     fsize = 10
     lw = 1.0
@@ -87,12 +88,49 @@ def figure_style(title_fontsize=12, label_fontsize=10, tick_fontsize=10):
 
 # N. Laxague 2026
 
-def wind_speed_bins(Umin=2.0, Umax=12.0, dU=2.0):
+def wind_speed_bins(Umin=0.0, Umax=14.0, dU=2.0):
 
     edges = np.arange(Umin, Umax + dU / 2, dU)
     centers = edges[:-1] + dU / 2
 
     return centers, edges, dU
+
+# %%
+
+# Write computed figure values as LaTeX macros for \input into paper.tex, so the
+# numbers in captions/text/tables stay in sync with the figures that produce them.
+
+# N. Laxague 2026
+
+def write_tex_macros(filename, macros, source=None, directory='../_tex'):
+    r"""Write a LaTeX macro file (one value per \newcommand) for \input into paper.tex.
+
+    filename  : output name, e.g. 'Hm0_values.tex'; written under `directory`
+                (default '../_tex' -> repo-root/_tex when run from _codes).
+    macros    : dict {name: value}. `name` must be letters only (a valid LaTeX
+                control sequence); prefix per figure to avoid clashes across files
+                (e.g. 'HmRMSEemp'). `value` is stringified -- pass a pre-formatted
+                string for explicit precision, e.g. f'{x:.2f}'.
+    source    : optional producing-script name, recorded in the file header.
+
+    Each macro is emitted as
+        \providecommand{\name}{}\renewcommand{\name}{value}
+    so re-running the figure (or re-\input) never raises 'already defined'. The file
+    is written atomically. Use inline in paper.tex as \name (e.g. \HmRMSEemp)."""
+    import os, re
+    bad = sorted(k for k in macros if not re.fullmatch('[A-Za-z]+', k))
+    if bad:
+        raise ValueError('LaTeX macro names must be letters only; invalid: %s' % bad)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, filename)
+    header = '%% auto-generated%s; do not edit by hand\n' % (' by ' + source if source else '')
+    body = ''.join('\\providecommand{\\%s}{}\\renewcommand{\\%s}{%s}\n' % (k, k, v)
+                   for k, v in macros.items())
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as fh:
+        fh.write(header + body)
+    os.replace(tmp, path)
+    return path
 
 # %%
 
@@ -498,7 +536,10 @@ def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnu
     ind_p = np.argmax(Dtheta.data)
 
     theta_super = np.concatenate((wavedir-360,wavedir,wavedir+360),axis=0)
-    theta_rel = theta_super - wavedir.data[ind_p]
+    # round off float noise (e.g. a radians->degrees axis) so the periodic window
+    # below keeps exactly one image of each bin -- otherwise a bin sitting 180 deg
+    # from the peak can slip in twice (length mismatch on the 'direction' coordinate)
+    theta_rel = np.round(theta_super - wavedir.data[ind_p], 3)
     D_array_super = np.concatenate((D_array.data,D_array.data,D_array.data),axis=1)
     F_array_super = np.concatenate((spec_energy_density,spec_energy_density,spec_energy_density),axis=1)
 

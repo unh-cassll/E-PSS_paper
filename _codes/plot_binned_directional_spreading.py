@@ -1,8 +1,8 @@
-# Plot E-PSS directional spreading sigma_theta vs wave scale (f, k, nu), binned by
+# Plot E-PSS directional spreading sigma_theta vs wave scale (f, k), binned by
 # U10. EWDM (trusted below a per-axis boundary) and direct full-frame slope spectra
 # (trusted above) drawn solid on their trusted side and faded beyond, as in
 # plot_binned_omnispect. ADCP underlaid dashed (solid within [f_low, 0.25 Hz], faded
-# beyond), mapped to k, nu by deep-water dispersion (k = (2 pi f)^2 / g, nu = 2 pi f / g).
+# beyond), mapped to k by deep-water dispersion (k = (2 pi f)^2 / g).
 # @author: nathanlaxague
 
 import numpy as np
@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 
 g = 9.81
 
-panel_labels = ['(a)','(b)','(c)']
+panel_labels = ['(a)','(b)']
 
 path = '../_data/'
 
@@ -73,7 +73,7 @@ def lobe_spread(directions_deg, density, halfwidth=90.0):
 
 def spreading(scale_values, directions, density):
     # sigma_theta vs scale from a directional spectrum density(scale, direction).
-    # Scale axis labeled 'frequency' so the shared estimator applies to f, k, nu;
+    # Scale axis labeled 'frequency' so the shared estimator applies to f and k;
     # per-scale spread is independent of that label.
     if not np.isfinite(density).any() or np.nansum(np.abs(density)) <= 0:
         return np.full(len(scale_values), np.nan)
@@ -88,11 +88,13 @@ def spreading(scale_values, directions, density):
         return np.full(len(scale_values), np.nan)
 
 
-# E-PSS directional spectra (elevation) in frequency, wavenumber, inverse phase speed
+# E-PSS directional spectra (elevation) in frequency and wavenumber
 ds_EPSS = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
+# Dataset direction is radians; the spreading estimator wraps in degrees (shape only,
+# unaffected by the per-radian density level), so view the axis in degrees.
+ds_EPSS = ds_EPSS.assign_coords(direction=np.degrees(ds_EPSS['direction']))
 f_EPSS = ds_EPSS['frequency'].data
 k_EPSS = ds_EPSS['wavenumber'].data
-nu_EPSS = ds_EPSS['inverse_phase_speed'].data
 dir_EPSS = ds_EPSS['direction'].data
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
@@ -102,7 +104,6 @@ U10_m_s = ds_other['COARE_U10'][:]
 ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
 f_direct = ds_emp['f_Hz'][:]
 k_direct = ds_emp['k_rad_m'][:]
-nu_direct = ds_emp['nu_s_m'][:]
 dir_direct = np.degrees(ds_emp['theta_rad'][:])      # deg CW from N (same sense as EWDM)
 
 # ADCP directional spectrum; wrap directions onto [-180, 180] (per plot_comparison)
@@ -119,12 +120,10 @@ num_runs = 190
 
 SPREAD_EPSS_f = np.nan*np.ones((num_runs,len(f_EPSS)))
 SPREAD_EPSS_k = np.nan*np.ones((num_runs,len(k_EPSS)))
-SPREAD_EPSS_nu = np.nan*np.ones((num_runs,len(nu_EPSS)))
 SPREAD_ADCP_f = np.nan*np.ones((num_runs,len(f_Hz_ADCP)))
 
 SPREAD_DIRECT_f = np.nan*np.ones((num_runs,len(f_direct)))
 SPREAD_DIRECT_k = np.nan*np.ones((num_runs,len(k_direct)))
-SPREAD_DIRECT_nu = np.nan*np.ones((num_runs,len(nu_direct)))
 
 
 def direct_dir(dirs, dens):
@@ -137,12 +136,10 @@ for run_ind in np.arange(0,num_runs):
 
     SPREAD_EPSS_f[run_ind,:] = spreading(f_EPSS, dir_EPSS, ds_EPSS['F_f_d'][:,:,run_ind].data)
     SPREAD_EPSS_k[run_ind,:] = spreading(k_EPSS, dir_EPSS, ds_EPSS['F_k_d'][:,:,run_ind].data)
-    SPREAD_EPSS_nu[run_ind,:] = spreading(nu_EPSS, dir_EPSS, ds_EPSS['Q_nu_d'][:,:,run_ind].data)
 
     # direct full-frame slope spectra (transpose to scale-by-direction)
     SPREAD_DIRECT_f[run_ind,:] = direct_dir(dir_direct, np.nan_to_num(ds_emp['S_f_theta'][run_ind].T))
     SPREAD_DIRECT_k[run_ind,:] = direct_dir(dir_direct, np.nan_to_num(ds_emp['S_k_theta'][run_ind].T))
-    SPREAD_DIRECT_nu[run_ind,:] = direct_dir(dir_direct, np.nan_to_num(ds_emp['Qs_nu_theta'][run_ind].T))
 
     # ADCP: triple-wrap the directions, slice to [-180, 180], spread vs f
     Ff = Fftheta_ADCP[:,:,run_ind].T                          # (f, theta)
@@ -170,19 +167,16 @@ def cap90(A):
 
 SPREAD_EPSS_f_binned = band_average(wind_bin(cap90(SPREAD_EPSS_f)))
 SPREAD_EPSS_k_binned = band_average(wind_bin(cap90(SPREAD_EPSS_k)))
-SPREAD_EPSS_nu_binned = band_average(wind_bin(cap90(SPREAD_EPSS_nu)))
 SPREAD_ADCP_f_binned = band_average(wind_bin(cap90(SPREAD_ADCP_f)))
 SPREAD_DIRECT_f_binned = band_average(wind_bin(cap90(SPREAD_DIRECT_f)))
 SPREAD_DIRECT_k_binned = band_average(wind_bin(cap90(SPREAD_DIRECT_k)))
-SPREAD_DIRECT_nu_binned = band_average(wind_bin(cap90(SPREAD_DIRECT_nu)))
 
 # Direct directional spectra above 7.5 Hz are untrustworthy; drop them.
 f_cut = 7.5
 SPREAD_DIRECT_f_binned[:, f_direct > f_cut] = np.nan
 
-# Deep-water linear dispersion: map the ADCP frequency axis to k and nu
+# Deep-water linear dispersion: map the ADCP frequency axis to k
 k_ADCP = (2*np.pi*f_Hz_ADCP)**2/g
-nu_ADCP = 2*np.pi*f_Hz_ADCP/g
 
 # ADCP directional estimate trusted within [f_low, f_ADCP_trust_high] (swell/wave
 # band); faded beyond, as in plot_comparison_of_directional_information.
@@ -194,7 +188,6 @@ colors = [cmap(j) for j in np.linspace(0,1,len(U_centers))]
 # Horizontal axis limits (full range from plot_binned_omnispect)
 f_lims = [1e-2,2e1]
 k_lims = [1e-2,1e3]
-nu_lims = [1e-2,5e0]
 
 lw_thick = 2.5
 lw_thin = 1.5
@@ -203,7 +196,6 @@ lw_thin = 1.5
 # at/below the boundary, direct slope spectra at/above; each faded beyond.
 f_bound = 0.7
 k_bound = 2.0
-nu_bound = 0.5
 alpha_faded = 0.30
 
 # Low-scale EWDM cutoff: below this the EWDM elevation spectrum overshoots the Riegl
@@ -215,7 +207,6 @@ n_frame_low = 73            # lambda/L_FOV at energy SNR = 0.5 (EWDM vs Riegl li
 k_low = 2*np.pi/(n_frame_low*L_FOV_m)
 omega_low = np.sqrt(g*k_low*np.tanh(k_low*h_m))
 f_low = omega_low/(2*np.pi)
-nu_low = k_low/omega_low
 
 
 def trusted_segments(x, bound, is_ewdm, low_bound=None):
@@ -238,7 +229,7 @@ def trusted_segments(x, bound, is_ewdm, low_bound=None):
 
 
 # ADCP dashed estimate: solid within [f_low, f_ADCP_trust_high], faded beyond. The
-# mask indexes f_Hz_ADCP; it applies to the k- and nu-mapped axes by position.
+# mask indexes f_Hz_ADCP; it applies to the k-mapped axis by position.
 adcp_solid, adcp_faded = trusted_segments(f_Hz_ADCP, f_ADCP_trust_high, True, f_low)
 
 
@@ -246,11 +237,10 @@ adcp_solid, adcp_faded = trusted_segments(f_Hz_ADCP, f_ADCP_trust_high, True, f_
 columns = [
     (f_EPSS,  f_direct,  f_Hz_ADCP, f_bound,  f_low,  f_lims,  'f [Hz]'),
     (k_EPSS,  k_direct,  k_ADCP,    k_bound,  k_low,  k_lims,  r'k [rad m$^{-1}$]'),
-    (nu_EPSS, nu_direct, nu_ADCP,   nu_bound, nu_low, nu_lims, r'$\nu$ [s m$^{-1}$]'),
 ]
 
-spread_EWDM = [SPREAD_EPSS_f_binned, SPREAD_EPSS_k_binned, SPREAD_EPSS_nu_binned]
-spread_DIRECT = [SPREAD_DIRECT_f_binned, SPREAD_DIRECT_k_binned, SPREAD_DIRECT_nu_binned]
+spread_EWDM = [SPREAD_EPSS_f_binned, SPREAD_EPSS_k_binned]
+spread_DIRECT = [SPREAD_DIRECT_f_binned, SPREAD_DIRECT_k_binned]
 
 
 def draw_technique(ax, x, Y, bound, is_ewdm, low_bound=None):
@@ -279,7 +269,7 @@ def draw_panel(ax, x_EWDM, Y_EWDM, x_DIRECT, Y_DIRECT, x_ADCP, Y_ADCP, bound, lo
     ax.grid(which='minor', linestyle=':', linewidth=0.75)
 
 
-fig, axs = plt.subplots(1, 3, figsize=(fullwidth*1.5, fullwidth*0.5))
+fig, axs = plt.subplots(1, 2, figsize=(fullwidth, fullwidth*0.5))
 
 for n, (x_EWDM, x_DIRECT, x_ADCP, bound, low_bound, xlims, xlabel) in enumerate(columns):
 
@@ -290,13 +280,12 @@ for n, (x_EWDM, x_DIRECT, x_ADCP, bound, low_bound, xlims, xlabel) in enumerate(
     axs[n].text(0.05,0.92,panel_labels[n],fontsize=fsize,ha='center',va='center',transform=axs[n].transAxes)
 
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$^\circ$]')
-for n in (1,2):
-    axs[n].set_yticklabels([])
+axs[1].set_yticklabels([])
 
 # E-PSS (solid: EWDM below boundary, direct slope above) vs ADCP (dashed) legend
 axs[0].plot([],[],'-',color='black',linewidth=lw_thin,label='E-PSS (EWDM / direct)')
 axs[0].plot([],[],'--',color='black',linewidth=lw_thin,label='ADCP')
-axs[0].legend(loc='lower left',fontsize=fsize-2)
+axs[0].legend(loc='lower left',fontsize=fsize)
 
 plt.tight_layout()
 

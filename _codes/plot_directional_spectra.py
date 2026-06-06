@@ -42,7 +42,10 @@ ds = nc.Dataset(fn)
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
-    
+# Dataset direction is radians; plot the angular axis in degrees (matches the EWDM
+# polar plotter and the per-degree ADCP spectrum below).
+ds_EPSS_spect = ds_EPSS_spect.assign_coords(direction=np.degrees(ds_EPSS_spect['direction']))
+
 f_Hz = ds['f_Hz'][:]
 
 fs_Hz = np.floor(2*f_Hz[len(f_Hz)-1])
@@ -114,7 +117,9 @@ dataset_Pyxis_frequency = xr.Dataset(
 
 Ffd = dataset_Pyxis_frequency.Ffd
 
-F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]
+# F_f_d is a per-radian density; convert to per-degree to share the colorbar with
+# the per-degree ADCP spectrum (label below stays deg^-1).
+F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]*np.pi/180
 
 Ff_ADCP = dataset_ADCP.F_ADCP.integrate('direction')
 F_ADCP = dataset_ADCP.F_ADCP
@@ -140,13 +145,13 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth/2), layout="co
 plot_directional_spectrum(
     to_compass(np.log10(F_ADCP)), ax=ax1, levels=None, colorbar=False,
     cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
-    wspd=U10[run_ind], wdir=90 - (winddir[run_ind] + 180),   # point downwind
+    curspd=U10[run_ind], curdir=90 - (winddir[run_ind] + 180),   # point downwind (curdir path -> red arrow; lib wind arrow is hardcoded black)
 )
 plot_directional_spectrum(
     to_compass(np.log10(F_EPSS)), ax=ax2, levels=None, colorbar=True,
     cbar_kw={"label": "$F(f,\\theta)\\;\\mathrm{[m^2 Hz^{-1} deg^{-1}]}$"},
     cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
-    wspd=U10[run_ind], wdir=90 - (winddir[run_ind] + 180),   # point downwind
+    curspd=U10[run_ind], curdir=90 - (winddir[run_ind] + 180),   # point downwind (curdir path -> red arrow; lib wind arrow is hardcoded black)
 )
 _ = ax1.set(xlabel="", ylabel="", title="MEM, ADCP")
 _ = ax2.set(xlabel="", ylabel="", title="EWDM, E-PSS")
@@ -157,7 +162,11 @@ ax2.grid(False)
 ax1.text(0.05,0.95,'(a)',color='black',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
 ax2.text(0.05,0.95,'(b)',color='black',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
 
-plt.savefig('../_figures/directional_spectra_polar.pdf',bbox_inches='tight')
+# rasterize the polar pcolormesh meshes so they save crisply at the figure DPI
+for ax in (ax1, ax2):
+    [c.set_rasterized(True) for c in ax.collections]
+
+plt.savefig('../_figures/directional_spectra_polar.pdf',bbox_inches='tight',dpi=300)
 
 # %%
 # Directional wave spectra (Cartesian grid)
@@ -204,6 +213,6 @@ ax2.set(title="EWDM, E-PSS")
 cbar = fig.colorbar(pc2)
 cbar.set_label(r'$D(f,\theta)$')
 
-plt.savefig('../_figures/directional_spectra_combined.pdf',bbox_inches='tight')
+plt.savefig('../_figures/directional_spectra_combined.pdf',bbox_inches='tight',dpi=300)
 
 

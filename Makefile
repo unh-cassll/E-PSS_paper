@@ -22,7 +22,7 @@ update-deps:
 	  --refresh-package ewdm --reinstall-package ewdm \
 	  --refresh-package epss --reinstall-package epss \
 	  "ewdm @ git+https://github.com/dspelaez/extended-wdm.git" \
-	  "epss @ git+https://github.com/unh-cassll/polarimetric-slope-sensing.git#subdirectory=Python"
+	  "epss @ git+https://github.com/unh-cassll/polarimetric-slope-sensing.git"
 
 data:
 	$(MAKE) -j 11 -C _data

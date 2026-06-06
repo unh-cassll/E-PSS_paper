@@ -165,8 +165,6 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
         # Signal-to-noise of the empirical-gain bin means (flags unresolved coefficients)
         if dolp_gain_choices[j] == 'empirical gain':
             bin_SNR = np.abs(bin_means)/(bin_std/np.sqrt(bin_counts))
-            print(f'  {slope_stats_output_names[i]:>4} empirical-gain SNR per bin: ' +
-                  np.array2string(bin_SNR, precision=1, floatmode='fixed'))
 
         row_index, col_index = panel_positions[i]
 
@@ -192,11 +190,11 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
 
     # Skewness coefficients (c21, c03) never reach 2-sigma significance in any
     # wind bin (empirical-gain SNR < 2 throughout); cover and mark as unresolved.
-    if slope_stats_output_names[i] in ('c21','c03') and np.nanmax(bin_SNR) < 2.0:
+    if slope_stats_output_names[i] in ('c21','c03') and np.nanmax(bin_SNR[1::]) < 2.0:
         axs[row_index,col_index].axhline(0.0, color='0.5', linewidth=0.8, linestyle='--', zorder=0)
         axs[row_index,col_index].add_patch(plt.Rectangle((0,0),1,1,transform=axs[row_index,col_index].transAxes,
             facecolor='0.5', alpha=0.4, zorder=5))
-        axs[row_index,col_index].text(0.5,0.05,'not resolved (SNR < 2)',fontsize=fsize-2,
+        axs[row_index,col_index].text(0.5,0.05,'not resolved (SNR < 2)',fontsize=fsize,
             ha='center',va='bottom',style='italic',color='red',zorder=6,
             transform=axs[row_index,col_index].transAxes)
 

@@ -32,6 +32,10 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
 
+# Dataset direction is radians; the spreading estimator wraps in degrees, so view
+# the axis in degrees here (F_f_d stays per-radian; only ratios/shapes are used).
+ds_EPSS_spect = ds_EPSS_spect.assign_coords(direction=np.degrees(ds_EPSS_spect['direction']))
+
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
 f_Hz_omni = ds_omnispect['frequency'][:].data
 F_f_m2_Hz_omni = ds_omnispect['F_f_m2_Hz_empirical_gain'][:].data

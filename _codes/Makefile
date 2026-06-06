@@ -2,52 +2,82 @@
 
 all: figures
 
-figures: binned_omnispect \
+figures: aperture_field_stitch \
+	binned_directional_spreading \
+	binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
 	DoLP_AOI_field \
 	DoLP_AOI_gain \
 	Hm0_scatterplots_lidar_EPSS \
+	longwave_shortwave_demo \
 	mueller_calc \
 	slope_elev_timeseries_and_spectra \
 	slope_PDFs \
 	slope_stats \
 	T_E_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
-	
+
+aperture_field_stitch: plot_aperture_field_stitch.py
+	@python3 plot_aperture_field_stitch.py
+	@echo "saved aperture_field_stitch.pdf to file"
+
+binned_directional_spreading: plot_binned_directional_spreading.py
+	@python3 plot_binned_directional_spreading.py
+	@echo "saved directional_spreading_binned_by_wind.pdf to file"
+
+longwave_shortwave_demo: plot_longwave_shortwave_demo.py
+	@python3 plot_longwave_shortwave_demo.py
+	@echo "saved longwave_shortwave_demo_stacked.pdf to file"
+
 binned_omnispect: plot_binned_omnispect.py
-	python3 plot_binned_omnispect.py
-	
+	@python3 plot_binned_omnispect.py
+	@echo "saved omnidirectional_spectra_binned_by_wind.pdf to file"
+
 comparison_of_directional_information: plot_comparison_of_directional_information.py
-	python3 plot_comparison_of_directional_information.py
-	
+	@python3 plot_comparison_of_directional_information.py
+	@echo "saved delta_theta_nought.pdf to file"
+	@echo "saved directional_spreading_comparison.pdf to file"
+
 directional_spectra: plot_directional_spectra.py
-	python3 plot_directional_spectra.py
-	
+	@python3 plot_directional_spectra.py
+	@echo "saved directional_spectra_polar.pdf to file"
+	@echo "saved directional_spectra_combined.pdf to file"
+
 DoLP_AOI_field: plot_DoLP_AOI_field.py
-	python3 plot_DoLP_AOI_field.py
+	@python3 plot_DoLP_AOI_field.py
+	@echo "saved DoLP_AOI_field.pdf to file"
 
 DoLP_AOI_gain: plot_DoLP_AOI_gain.py
-	python3 plot_DoLP_AOI_gain.py
+	@python3 plot_DoLP_AOI_gain.py
+	@echo "saved DoLP_AOI_gain_example.pdf to file"
 
 Hm0_scatterplots_lidar_EPSS: plot_Hm0_scatterplots_lidar_EPSS.py
-	python3 plot_Hm0_scatterplots_lidar_EPSS.py
+	@python3 plot_Hm0_scatterplots_lidar_EPSS.py
+	@echo "saved Hm0_comparison_lidar_epss.pdf to file"
+	@echo "saved Hm0_values.tex to file"
 
 mueller_calc: plot_mueller_calc.py
-	python3 plot_mueller_calc.py
+	@python3 plot_mueller_calc.py
+	@echo "saved mueller_calc_example.pdf to file"
 
 slope_elev_timeseries_and_spectra: plot_slope_elev_timeseries_and_spectra.py
-	python3 plot_slope_elev_timeseries_and_spectra.py
+	@python3 plot_slope_elev_timeseries_and_spectra.py
+	@echo "saved elevation_omnispect.pdf to file"
 
 slope_PDFs: plot_slope_PDFs.py
-	python3 plot_slope_PDFs.py
+	@python3 plot_slope_PDFs.py
+	@echo "saved slope_distributions_binned_by_wind.pdf to file"
 
 slope_stats: plot_slope_stats.py
-	python3 plot_slope_stats.py
+	@python3 plot_slope_stats.py
+	@echo "saved mss_upwind_crosswind.pdf to file"
+	@echo "saved slope_distribution_GC_coeffs.pdf to file"
 
 T_E_scatterplots_lidar_EPSS: plot_T_E_scatterplots_lidar_EPSS.py
-	python3 plot_T_E_scatterplots_lidar_EPSS.py
+	@python3 plot_T_E_scatterplots_lidar_EPSS.py
+	@echo "saved T_E_comparison_lidar_epss.pdf to file"
 
 wave_measurement_stommel_diagram: plot_wave_measurement_stommel_diagram.py
-	python3 plot_wave_measurement_stommel_diagram.py
-
+	@python3 plot_wave_measurement_stommel_diagram.py
+	@echo "saved wave_measurement_stommel_diagram.pdf to file"
