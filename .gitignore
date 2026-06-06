@@ -13,8 +13,12 @@ __pycache__/
 # Ignore specific file types in the figs/ folder
 _figures/*.pdf
 
-# Ignore .nc files in the _data/ folder
+# Ignore .nc and .npz files in the _data/ folder
 _data/*.nc
+_data/*.npz
+
+# Ignore the contents of _dustbin/
+_dustbin/*
 
 # Ignore the contents of _dustbin/
 _dustbin/*

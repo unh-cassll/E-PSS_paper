@@ -1,0 +1,11 @@
+{
+  // Run "▷ Run Python File" with the cwd set to the script's own folder
+  // (e.g. _codes/), so the scripts' '../_data/' and '../_figures/' relative
+  // paths resolve exactly as they do under `make`.
+  "python.terminal.executeInFileDir": true,
+  // Same fix for the Python Interactive window (Shift+Enter on '# %%' cells),
+  // which otherwise runs from the workspace root and ignores the setting above.
+  "jupyter.notebookFileRoot": "${fileDirname}",
+  // Use the project venv (has ewdm, pyGrad2Surf, etc.).
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+}

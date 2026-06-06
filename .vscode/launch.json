@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Debug the file in the editor with cwd = its own folder, so the
+      // scripts' '../_data/' and '../_figures/' relative paths resolve.
+      "name": "Python: Current File (in its dir)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal"
+    }
+  ]
+}
