@@ -20,9 +20,6 @@ _data/*.npz
 # Ignore the contents of _dustbin/
 _dustbin/*
 
-# Ignore the contents of _dustbin/
-_dustbin/*
-
 # Ignore robot bits
 .venv
 .vscode

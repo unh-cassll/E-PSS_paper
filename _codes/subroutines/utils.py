@@ -1,16 +1,20 @@
 """
 Project-specific helpers for the E-PSS paper.
 
+    L_FOV_M, DX_M, WATER_DEPTH_M, ...     canonical ASIT2019 deployment constants
     figure_style                          paper plot styling
     wind_speed_bins                       canonical fixed-width U10 bins
     write_tex_macros                      LaTeX \newcommand value file for paper.tex
+    scatter_metrics                       R^2/RMSE/slope/bias of a scatter comparison
+    draw_metrics_box                      inset metrics table for scatter figures
+    ewdm_low_cutoff                       EWDM low-scale trust cutoff (k_low, f_low)
+    epss_ewdm_grids                       EWDM f/k/nu grids (generator config)
     mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
     compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier slope PDF
     fit_gram_charlier_slope_pdf           least-squares Gram-Charlier fit
     slope_to_elev_wavelet                 1-D wavelet slope-to-elevation inversion
-    trim_EPSS_dirspec                     +/-180 deg ambiguity resolution
+    omni_complete_spectrum                directionally-complete (S_sx+S_sy)/k^2 spectrum
     compute_mean_wave_direction_and_spreading
-    plot_directional_spectrum             N-up polar directional spectrum plot
 """
 
 import numpy as np
@@ -30,12 +34,54 @@ from scipy.signal.windows import tukey
 # Internal-only upstream imports (underscore-aliased so they do not leak
 # through `from subroutines.utils import *`).
 from eta_field_recon import lindisp_with_current as _lindisp_with_current
+from eta_field_recon import aperture_transfer_function as _aperture_transfer_function
 from eta_field_recon.wavelet_core import (
     _cwt as _ewdm_cwt,
     _inverse_cwt as _ewdm_icwt,
     krogstad_eta_coeffs as _krogstad_eta_coeffs,
     skirt_correction as _skirt_correction,
 )
+
+__all__ = [
+    'GRAV', 'L_FOV_M', 'N_PX', 'DX_M', 'WATER_DEPTH_M', 'FS_HZ', 'NUM_RUNS',
+    'NUM_SAMPLES',
+    'figure_style', 'wind_speed_bins', 'write_tex_macros',
+    'scatter_metrics', 'draw_metrics_box', 'ewdm_low_cutoff', 'epss_ewdm_grids',
+    'mueller_calc_full', 'compute_gram_charlier_slope_pdf',
+    'fit_gram_charlier_slope_pdf', 'slope_to_elev_wavelet',
+    'omni_complete_spectrum', 'compute_mean_wave_direction_and_spreading',
+]
+
+# %%
+
+# Canonical ASIT2019 / E-PSS deployment constants (single source of truth for
+# values repeated across the compute and plot scripts)
+
+GRAV = 9.81             # gravitational acceleration [m/s^2]
+L_FOV_M = 2.915         # imaged-patch side length [m]
+N_PX = 32               # reduced slope-field pixels per side
+DX_M = L_FOV_M / N_PX   # reduced slope-field pixel size [m]
+WATER_DEPTH_M = 15.0    # water depth at ASIT [m]
+FS_HZ = 10.0            # slope-field / lidar sampling rate [Hz]
+NUM_RUNS = 190          # ASIT2019 runs
+NUM_SAMPLES = 6000      # samples per run (600 s at 10 Hz)
+
+
+def ewdm_low_cutoff(n_frame_low=73, L_FOV_m=L_FOV_M, depth_m=WATER_DEPTH_M):
+    """EWDM low-scale trust cutoff (k_low [rad/m], f_low [Hz]): lambda =
+    n_frame_low*L_FOV (energy SNR = 0.5 vs Riegl lidar), finite-depth dispersion."""
+    k_low = 2*np.pi/(n_frame_low*L_FOV_m)
+    f_low = np.sqrt(GRAV*k_low*np.tanh(k_low*depth_m))/(2*np.pi)
+    return k_low, f_low
+
+
+def epss_ewdm_grids(dx=DX_M, nf=64, nk=80, nnu=80):
+    """Log-spaced EWDM frequency [Hz], wavenumber [rad/m] (to the pixel Nyquist)
+    and inverse phase speed [s/m] grids (multi-aperture generator config)."""
+    freqs = np.logspace(np.log10(0.035), np.log10(3.5), nf)
+    k_grid = 2.0**np.linspace(np.log2(0.01), np.log2(np.pi/dx), nk)
+    nu_grid = 2.0**np.linspace(np.log2(0.005), np.log2(2.0), nnu)
+    return freqs, k_grid, nu_grid
 
 # %%
 
@@ -46,18 +92,7 @@ def figure_style(title_fontsize=10, label_fontsize=10, tick_fontsize=10):
     fsize = 10
     lw = 1.0
 
-    sns.set_context("paper", rc={
-        "axes.grid": True,
-        "font.size": fsize,
-        "axes.titlesize": title_fontsize,
-        "axes.labelsize": label_fontsize,
-        "xtick.labelsize": tick_fontsize,
-        "ytick.labelsize": tick_fontsize,
-        "grid.linewidth": lw,
-        "xtick.major.width": lw,
-        "ytick.major.width": lw,
-    })
-
+    # set_theme resets the context; font sizes/linewidths applied via rcParams below
     sns.set_theme(style="ticks",palette="deep",font="Fira Sans")
 
     color_list = ['#4C2882', '#367588', '#A52A2A', '#C39953', '#2A52BE', '#006611']
@@ -131,6 +166,48 @@ def write_tex_macros(filename, macros, source=None, directory='../_tex'):
         fh.write(header + body)
     os.replace(tmp, path)
     return path
+
+# %%
+
+# Scatter-comparison metrics and the inset metrics table shared by the
+# Hm0/Tm02 lidar-vs-E-PSS figures
+
+
+def scatter_metrics(x, y):
+    """(R^2, RMSE, slope, intercept) of y vs x over finite pairs."""
+    x = np.asarray(x, float)
+    y = np.asarray(y, float)
+    keep = np.isfinite(x) & np.isfinite(y)
+    rmse = float(np.sqrt(np.mean((y[keep] - x[keep])**2)))
+    r = np.corrcoef(x[keep], y[keep])[0, 1]
+    slope, intercept = np.polyfit(x[keep], y[keep], 1)
+    return r**2, rmse, float(slope), float(intercept)
+
+
+def draw_metrics_box(ax, metrics, labels, colors, units, box_xy, box_w, box_h,
+                     col_step, unit_dx, fsize, delta_x=(0.03, 0.03, 0.04)):
+    """Inset table of per-category (R^2, RMSE, slope, bias) in axes-fraction
+    coordinates. metrics: list of scatter_metrics tuples; units: (RMSE, bias)
+    unit strings; col_step/unit_dx set the column pitch and units offset."""
+    ax.add_patch(plt.Rectangle(box_xy, box_w, box_h, transform=ax.transAxes,
+                               color='k', alpha=0.95, edgecolor='k', linewidth=2))
+    ax.add_patch(plt.Rectangle(box_xy, box_w, box_h, transform=ax.transAxes,
+                               color='w', alpha=0.95, edgecolor='k', linewidth=0.5))
+    x0, y0 = 0.02, 0.93
+    ax.text(x0, y0, 'R²\nRMSE\nslope\nbias', transform=ax.transAxes,
+            fontsize=fsize, verticalalignment='top')
+    ax.text(x0 + 0.12, y0, ' = \n = \n = \n = ', transform=ax.transAxes,
+            fontsize=fsize, verticalalignment='top')
+    x = x0 + 0.05
+    for (r2, rmse, slope, bias), label, color, dxv in zip(metrics, labels, colors, delta_x):
+        x += col_step
+        ax.text(x + dxv + 0.01, y0 + 0.05, label, color=color, transform=ax.transAxes,
+                fontsize=fsize, verticalalignment='top', horizontalalignment='center')
+        ax.text(x, y0, f'{r2:.2f}\n{rmse:.2f}\n{slope:.2f}\n{bias:.2f}', color=color,
+                transform=ax.transAxes, fontsize=fsize, verticalalignment='top')
+    # units on the dimensional rows (RMSE, bias); blank lines keep row spacing
+    ax.text(x + unit_dx, y0, '\n%s\n\n%s' % units, color='k', transform=ax.transAxes,
+            fontsize=fsize, verticalalignment='top')
 
 # %%
 
@@ -226,7 +303,8 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
         dims = ['slope_cross', 'slope_up']
         )
 
-    wave_slope_PDF['PDF_cross_along'] = wave_slope_PDF/wave_slope_PDF.integrate('slope_cross').integrate('slope_up')
+    # Normalize to unit integral over the tabulated slope range
+    wave_slope_PDF = wave_slope_PDF/wave_slope_PDF.integrate('slope_cross').integrate('slope_up')
 
     return wave_slope_PDF, mss_cross, mss_up
 
@@ -405,12 +483,9 @@ def slope_to_elev_wavelet(
     eta = _ewdm_icwt(W_eta, freqs=freqs, fs=fs_Hz, per_scale=per_scale)
     eta = np.asarray(eta, dtype=float)
 
-    # Up-positive sign handled upstream in krogstad_eta_coeffs (+1j convention,
-    # verified against the synthetic unit-cosine test and the ASIT2019 lidar);
-    # no correction needed. NB epss commit 852ee94 had inverted this and was
-    # reverted -- the elevation sign is blind to the directional-spectrum
-    # validations here (spectra/Hm0 are quadratic), so only a waveform check
-    # constrains it.
+    # Up-positive sign set upstream in krogstad_eta_coeffs (+1j convention).
+    # Spectra/Hm0 are quadratic and blind to the sign; only a waveform check
+    # (synthetic unit cosine, ASIT2019 lidar) constrains it.
 
     if window_power_correct:
         eta = eta / np.sqrt(np.mean(w ** 2))
@@ -441,10 +516,17 @@ def slope_to_elev_wavelet(
 def omni_complete_spectrum(slope_east, slope_north, water_depth_m, fs_Hz,
                            fmin_Hz=0.08, transition_octaves=0.25,
                            nfft=3000, nperseg=1500, highpass_peak_fraction=None,
-                           highpass_peak_floor_Hz=0.08, highpass_corner_floor_Hz=0.06):
+                           highpass_peak_floor_Hz=0.08, highpass_corner_floor_Hz=0.06,
+                           aperture_diameter_m=None, aperture_min_transfer=0.5):
     """Directionally-complete omnidirectional elevation spectrum (S_sx+S_sy)/k^2
     with a squared logistic high-pass (corner fixed at fmin_Hz, or adaptive at
-    highpass_peak_fraction * spectral peak when set)."""
+    highpass_peak_fraction * spectral peak when set).
+
+    aperture_diameter_m: if set, divide out the circular-disc aperture transfer
+    H(k)^2 (jinc), undoing the spatial low-pass of averaging slope over the disc.
+    The gain is capped at 1/aperture_min_transfer^2 (frozen where H<min_transfer)
+    so the near-null region is not noise-amplified; this recovers the high-f
+    spectrum up to ~H=0.5 (a single disc cannot recover its nulled band)."""
     sE = np.asarray(slope_east, dtype=float).reshape(-1)
     sN = np.asarray(slope_north, dtype=float).reshape(-1)
     sE = np.where(np.isfinite(sE), sE, 0.0)
@@ -454,6 +536,10 @@ def omni_complete_spectrum(slope_east, slope_north, water_depth_m, fs_Hz,
     _, k = _lindisp_with_current(2 * np.pi * np.maximum(f, 1e-6), water_depth_m, 0.0)
     k = np.nan_to_num(np.asarray(k, dtype=float), nan=np.inf, posinf=np.inf)
     S = (P_sx + P_sy) / np.maximum(k ** 2, 1e-12)
+    if aperture_diameter_m is not None:
+        H = _aperture_transfer_function(k, aperture_diameter_m, shape="circular")
+        gain = 1.0 / np.maximum(np.abs(H), aperture_min_transfer) ** 2
+        S = S * np.where(np.isfinite(gain), gain, 1.0)   # f=0 (k=inf): no correction
     corner = fmin_Hz
     if highpass_peak_fraction is not None:
         sel = (f >= highpass_peak_floor_Hz) & (f <= 0.40)
@@ -512,7 +598,9 @@ def _lf_noise_transfer(fs_Hz, n, water_depth_m, fmin_Hz, fmax_Hz,
 
 def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnum=3):
 
-    F_dirspec.data = np.nan_to_num(F_dirspec.data,0)
+    # Work on a copy; the caller's spectrum is left untouched
+    F_dirspec = F_dirspec.copy(deep=True)
+    F_dirspec.data = np.nan_to_num(F_dirspec.data, nan=0.0)
     spec_energy_density = F_dirspec.data
 
     wavedir = F_dirspec["direction"].copy()
@@ -527,18 +615,17 @@ def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnu
 
         fourier_scale = F_dirspec["wavenumber"].data
         fourier_scale_name = 'wavenumber'
-        spec_energy_density = spec_energy_density*np.reshape(fourier_scale,(1,len(wavedir)))
+        spec_energy_density = spec_energy_density*np.reshape(fourier_scale,(len(fourier_scale),1))
 
-    D_array = ((F_dirspec.T / F_dirspec.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T
-    D_array.data = np.nan_to_num(D_array.data,0)
+    D_array = ((F_dirspec.T / F_dirspec.integrate("direction")).rolling({fourier_scale_name: smoothnum}, center=True).median()).T
+    D_array.data = np.nan_to_num(D_array.data, nan=0.0)
 
-    Dtheta = D_array.integrate("frequency")
+    Dtheta = D_array.integrate(fourier_scale_name)
     ind_p = np.argmax(Dtheta.data)
 
     theta_super = np.concatenate((wavedir-360,wavedir,wavedir+360),axis=0)
-    # round off float noise (e.g. a radians->degrees axis) so the periodic window
-    # below keeps exactly one image of each bin -- otherwise a bin sitting 180 deg
-    # from the peak can slip in twice (length mismatch on the 'direction' coordinate)
+    # round off float noise so the periodic window keeps exactly one image of
+    # each bin (else a bin 180 deg from the peak can appear twice)
     theta_rel = np.round(theta_super - wavedir.data[ind_p], 3)
     D_array_super = np.concatenate((D_array.data,D_array.data,D_array.data),axis=1)
     F_array_super = np.concatenate((spec_energy_density,spec_energy_density,spec_energy_density),axis=1)

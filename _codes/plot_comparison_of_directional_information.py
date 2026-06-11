@@ -10,19 +10,17 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
-from sklearn.metrics import mean_squared_error
-
 from scipy import stats
 
 from eta_field_recon import lindisp_with_current
-from subroutines.utils import figure_style, compute_mean_wave_direction_and_spreading, wind_speed_bins
+from subroutines.utils import (figure_style, compute_mean_wave_direction_and_spreading,
+                               wind_speed_bins, write_tex_macros, ewdm_low_cutoff,
+                               NUM_RUNS, WATER_DEPTH_M)
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
 
 warnings.filterwarnings("ignore")
-
-g = 9.81;
 
 panel_labels = ['(a)','(b)']
 
@@ -56,10 +54,8 @@ theta_deg_ADCP = bigtheta[inds_keep]
 
 f_Hz = ds_EPSS_spect['frequency'].data
 
-num_runs = 190
+num_runs = NUM_RUNS
 num_f = len(f_Hz)
-fs_Hz = 2*f_Hz[len(f_Hz)-1]
-nperseg = np.int16((num_f-1)*2)
 
 MWD_ADCP = np.nan*np.ones(num_runs)
 MWD_EPSS = MWD_ADCP.copy()
@@ -72,14 +68,6 @@ SPREAD_EPSS = np.nan*np.ones((num_runs,num_f))
 
 Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 
-f_low_filt = 0.01
-f_high_filt = 1
-
-f_lp = 1
-f_hp = 1/20
-
-water_depth_m = 15
-
 smoothnum = 5
 
 theta_halfwidth = 120
@@ -89,14 +77,10 @@ f_cut_high = 0.4
 f_cut_high_EPSS = 0.7          # E-PSS directional spreading trusted to higher f than MWD/Tm01
 
 # Trusted frequency band for sigma_theta(f) display: faded below the shared low
-# bound f_low; E-PSS solid above it, ADCP solid only up to f_ADCP_trust_high (faded
-# beyond). f_low matches plot_binned_omnispect (waves shorter than 73x the camera
-# FOV, finite-depth dispersion at h = 15 m).
+# bound f_low (EWDM low-scale cutoff, matches plot_binned_omnispect); E-PSS solid
+# above it, ADCP solid only up to f_ADCP_trust_high (faded beyond).
 f_ADCP_trust_high = 0.25
-L_FOV_m = 2.915
-n_frame_low = 73
-k_low = 2*np.pi/(n_frame_low*L_FOV_m)
-f_low = np.sqrt(g*k_low*np.tanh(k_low*water_depth_m))/(2*np.pi)
+_, f_low = ewdm_low_cutoff()
 alpha_faded = 0.30             # opacity of each estimate beyond its trusted band
 
 f_Hz_copy = f_Hz_omni.copy()
@@ -143,12 +127,17 @@ for run_ind in np.arange(0,num_runs):
     inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
     F_EPSS.data[inds_exclude,:] = 0
 
-    mwd_EPSS, _ = compute_mean_wave_direction_and_spreading(F_EPSS,theta_halfwidth,smoothnum)
-    MWD_EPSS[run_ind] = mwd_EPSS*-1+90
+    # MWD compared only over the ADCP-trusted band [f_cut_low, f_ADCP_trust_high];
+    # spreading/Tm01 keep their own bands
+    F_EPSS_mwd = F_EPSS.copy(deep=True)
+    F_EPSS_mwd.data[F_EPSS_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
+    mwd_EPSS, _ = compute_mean_wave_direction_and_spreading(F_EPSS_mwd,theta_halfwidth,smoothnum)
+    # F_f_d direction is already degrees CW-from-N (matches the ADCP MWD);
+    # no math-angle -> compass conversion
+    MWD_EPSS[run_ind] = mwd_EPSS
 
-    # sigma_theta(f) is trusted to a higher frequency than MWD/Tm01; recompute the
-    # directional spreading on the extended band [f_cut_low, f_cut_high_EPSS] from the
-    # spectrum prior to the standard high-frequency cut (leaves MWD/Tm01 unchanged).
+    # sigma_theta(f) is trusted to higher f than MWD/Tm01: recompute on the
+    # extended band [f_cut_low, f_cut_high_EPSS]
     F_EPSS_spread = ds_EPSS_spect['F_f_d'][:,:,run_ind].copy(deep=True)
     inds_exclude_spread = (F_EPSS_spread["frequency"].data > f_cut_high_EPSS) | (F_EPSS_spread["frequency"].data < f_cut_low)
     F_EPSS_spread.data[inds_exclude_spread,:] = 0
@@ -158,7 +147,9 @@ for run_ind in np.arange(0,num_runs):
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
     
     if total_energy > 0:
-        mwd_ADCP, _ = compute_mean_wave_direction_and_spreading(F_ADCP,theta_halfwidth,smoothnum)
+        F_ADCP_mwd = F_ADCP.copy(deep=True)
+        F_ADCP_mwd.data[F_ADCP_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
+        mwd_ADCP, _ = compute_mean_wave_direction_and_spreading(F_ADCP_mwd,theta_halfwidth,smoothnum)
         _, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP_spread,theta_halfwidth,smoothnum)
 
         Ff_ADCP = F_ADCP.integrate('direction').data
@@ -173,7 +164,7 @@ for run_ind in np.arange(0,num_runs):
     else:
         ind_peak_ADCP[run_ind] = 0
         MWD_ADCP[run_ind] = np.nan
-        SPREAD_ADCP[run_ind,:] = np.nan*np.ones((1,43))
+        SPREAD_ADCP[run_ind,:] = np.nan
         
     f_diff = np.abs(f_E[run_ind]-f_Hz)
     f_diff[0] = 1e3
@@ -187,13 +178,13 @@ for run_ind in np.arange(0,num_runs):
     Tm01_EPSS[run_ind] = F_EPSS.integrate('direction').integrate('frequency')/np.trapezoid(F_EPSS['frequency'][:]*Ff_EPSS_val,x=F_EPSS['frequency'][:])
 
 h_m_ADCP = 18.3
-h_m_EPSS = 15
+h_m_EPSS = WATER_DEPTH_M
 
 omega_ADCP = 2*np.pi*Tm01_ADCP**-1
 omega_EPSS = 2*np.pi*Tm01_EPSS**-1
 
 C_m_s_disp_ADCP, _ = lindisp_with_current(omega_ADCP,h_m_ADCP,0)
-C_m_s_disp_EPSS, _ = lindisp_with_current(omega_EPSS,h_m_ADCP,0)
+C_m_s_disp_EPSS, _ = lindisp_with_current(omega_EPSS,h_m_EPSS,0)
 
 # Refract ADCP MWD from 18.3 m to 15 m depth (coastline ~E-W)
 MWD_ADCP_shifted = np.asin(C_m_s_disp_EPSS/C_m_s_disp_ADCP*np.sin(MWD_ADCP*np.pi/180))*180/np.pi
@@ -205,15 +196,10 @@ inds_northerly = MWD_EPSS > 90
 MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] - 180
 MWD_diff = MWD_EPSS-MWD_ADCP_shifted
 
-metrics = {}
-
-# MAE and RMSE for MWD: ADCP vs. E-PSS
-x = MWD_ADCP_shifted
-y = MWD_EPSS
-inds_keep = (~np.isnan(x) & ~np.isnan(y))
-mae = np.nanmean(MWD_diff)
-rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
-metrics[0] = (mae, rmse)
+# Bias, MAE, and RMSE for MWD (E-PSS minus ADCP)
+MWD_bias = np.nanmean(MWD_diff)
+MWD_mae = np.nanmean(np.abs(MWD_diff))
+MWD_rmse = np.sqrt(np.nanmean(MWD_diff**2))
 
 # %%
 
@@ -256,13 +242,21 @@ SPREAD_peak = np.nan*np.ones((num_runs,2))
 SPREAD_peak[:,0] = SPREAD_ADCP_peak
 SPREAD_peak[:,1] = SPREAD_EPSS_peak
 
-# MAE and RMSE for directional spreading: ADCP vs. E-PSS
-x = SPREAD_ADCP_peak
-y = SPREAD_EPSS_peak
-inds_keep = (~np.isnan(x) & ~np.isnan(y))
-mae = np.nanmean(x[inds_keep]-y[inds_keep])
-rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
-metrics[1] = (mae, rmse)
+# Bias, MAE, and RMSE for directional spreading at f_E (E-PSS minus ADCP)
+SPREAD_diff = SPREAD_EPSS_peak - SPREAD_ADCP_peak
+SPREAD_bias = np.nanmean(SPREAD_diff)
+SPREAD_mae = np.nanmean(np.abs(SPREAD_diff))
+SPREAD_rmse = np.sqrt(np.nanmean(SPREAD_diff**2))
+
+# Export the directional comparison metrics as LaTeX macros for paper.tex
+write_tex_macros('directional_values.tex', {
+    'MwdBias':    f'{MWD_bias:.2f}',
+    'MwdMAE':     f'{MWD_mae:.2f}',
+    'MwdRMSE':    f'{MWD_rmse:.2f}',
+    'SpreadBias': f'{SPREAD_bias:.2f}',
+    'SpreadMAE':  f'{SPREAD_mae:.2f}',
+    'SpreadRMSE': f'{SPREAD_rmse:.2f}',
+}, source='plot_comparison_of_directional_information.py')
 
 labels = ['ADCP','E-PSS']
 

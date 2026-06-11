@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
 from eta_field_recon import lindisp_with_current
-from subroutines.utils import figure_style, wind_speed_bins
+from subroutines.utils import figure_style, wind_speed_bins, ewdm_low_cutoff, WATER_DEPTH_M
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -47,7 +47,7 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
 U10_m_s = ds_other["COARE_U10"]
 
-h_m = 15
+h_m = WATER_DEPTH_M
 g = 9.81
 
 # Full-frame slope (direct) spectra; S_f and S_k are SLOPE spectra
@@ -74,15 +74,8 @@ F_k_ewdm = ds_EWDM['F_k'].values       # (wavenumber, run)
 k_bound = 4.0
 f_bound = 0.7
 
-# Low-scale EWDM cutoff: for waves longer than ~73x the camera FOV the EWDM
-# elevation spectrum overshoots the Riegl lidar (slope noise amplified by 1/k^2)
-# to the point of energy SNR < 0.5. Fade the EWDM below it. From lambda =
-# 73*L_FOV via finite-depth dispersion (h = 15 m).
-L_FOV_m = 2.915
-n_frame_low = 73            # lambda/L_FOV at energy SNR = 0.5 (EWDM vs Riegl lidar)
-k_low = 2*np.pi/(n_frame_low*L_FOV_m)
-omega_low = np.sqrt(g*k_low*np.tanh(k_low*h_m))
-f_low = omega_low/(2*np.pi)
+# Low-scale EWDM trust cutoff; fade the EWDM below it
+k_low, f_low = ewdm_low_cutoff()
 
 U_centers, U_boundaries, dU = wind_speed_bins()
 

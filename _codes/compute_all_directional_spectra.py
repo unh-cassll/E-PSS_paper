@@ -18,23 +18,30 @@ import warnings
 warnings.filterwarnings("ignore")
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+from subroutines.utils import (DX_M, WATER_DEPTH_M, FS_HZ, NUM_RUNS, NUM_SAMPLES,
+                               epss_ewdm_grids)
+
 path = '../_data/'
 # input slope fields and output spectra are overridable via env vars (defaults
 # unchanged) so a re-normalized slope-field run can be produced alongside the original
 slope_field_file = path + os.environ.get('EPSS_FLD', 'ASIT2019_slope_fields_reduced.nc')
 output_file = path + os.environ.get('EPSS_OUT', 'ASIT2019_EPSS_directional_spectra.nc')
-fs, water_depth_m, num_samples, num_runs = 10.0, 15.0, 6000, 190
+fs, water_depth_m, num_samples, num_runs = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES, NUM_RUNS
 # de-piston cut wavelength as a multiple of the frame size (n*L); larger n = more
 # aggressive de-piston. Krogstad long-wave slope averaged over a centered disc of
 # this diameter [px]. Overridable per sweep member.
 depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 2.0))
 krog_disc = int(os.environ.get('EPSS_KROG_DISC', 32))
+# band-limit the long-wave recolor below this frequency [Hz] so its FOV-scale
+# boost does not double-count with the g2s short wave (overshoot at f~0.5-0.7/k~2)
+recolor_xover = float(os.environ.get('EPSS_RECOLOR_XOVER', 0.45))
+# recolor the long wave to the directionally-complete direct amplitude (default on);
+# EPSS_RECOLOR_DIRECT=0 disables it (pure Krogstad long wave) for isolation tests
+recolor_direct = bool(int(os.environ.get('EPSS_RECOLOR_DIRECT', '1')))
 
 # fixed grids (dx constant: 2.915 m / 32 px)
-dx = 2.915 / 32
-freqs = np.logspace(np.log10(0.035), np.log10(3.5), 64)
-k_grid = 2.0**np.linspace(np.log2(0.01), np.log2(np.pi / dx), 80)
-nu_grid = 2.0**np.linspace(np.log2(0.005), np.log2(2.0), 80)
+dx = DX_M
+freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
 
 # onshore swell tiebreaker: 3 km south of Martha's Vineyard, so long swell must
 # propagate onshore (northward); flip a swell-dominated run reading offshore.
@@ -66,12 +73,14 @@ def work(run_ind):
     if not np.isfinite(se).any():                        # NaN-flagged (corrupt) run
         return run_ind, None
     # gated de-piston: build_eta_field also returns the solve field with the
-    # uniform long-wave piston removed above 0.75*f_FOV, so the FOV-scale |k|
-    # solve is not biased low. slope_blend off; lo_frac/apertures from defaults.
+    # uniform long-wave piston removed above the depiston_n dispersion corner,
+    # so the FOV-scale |k| solve is not biased low
     eta, _, eta_solve = build_eta_field(np.nan_to_num(se).astype(float),
                                         np.nan_to_num(sn).astype(float),
                                         water_depth_m, fs,
-                                        krog_disc=krog_disc, depiston_n=depiston_n)
+                                        krog_disc=krog_disc, depiston_n=depiston_n,
+                                        recolor_direct=recolor_direct,
+                                        recolor_crossover_f=recolor_xover)
     M = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, water_depth_m, fs,
                               apertures=default_apertures(), n_staff=16,
                               solve_eta=eta_solve,

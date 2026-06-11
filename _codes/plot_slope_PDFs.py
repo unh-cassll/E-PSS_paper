@@ -1,6 +1,6 @@
 """
 Plot marginal slope PDFs (upwind and crosswind) binned by wind speed U10.
-Overlays Gram-Charlier reference curves from Cox and Munk [2006].
+Overlays Gram-Charlier reference curves from Breon & Henriot [2006].
 """
 
 import matplotlib.pyplot as plt
@@ -32,7 +32,8 @@ U_m_s = ds_other["EC_U_m_s"][:]
 ustar_m_s = ds_other["EC_ustar_m_s"][:]
 z_m_above_water = ds_other["EC_z_m_above_water"][:]
 
-U10_m_s = ustar_m_s/kappa*np.log10(10.0/z_m_above_water) + U_m_s
+# Log-law height adjustment to 10 m (natural log)
+U10_m_s = ustar_m_s/kappa*np.log(10.0/z_m_above_water) + U_m_s
 
 slope_centers = ds_no["slope_centers"][:]*-1
 slope_histogram_crosswind_upwind_no = ds_no["slope_histogram_crosswind_upwind"][:]
@@ -41,7 +42,10 @@ slope_histogram_crosswind_upwind_emp = ds_emp["slope_histogram_crosswind_upwind"
 
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
-slope_PDF = np.nan*np.ones((190,200,3,2))
+num_runs = slope_histogram_crosswind_upwind_no.shape[0]
+num_slope_bins = len(slope_centers)
+
+slope_PDF = np.nan*np.ones((num_runs,num_slope_bins,3,2))
 
 # Histograms are (runs, crosswind, upwind); last index 0 = upwind marginal, 1 = crosswind marginal (matches figure columns)
 slope_PDF[:,:,0,0] = np.trapezoid(slope_histogram_crosswind_upwind_no,x=slope_centers,axis=1)
@@ -63,7 +67,7 @@ U_high_string = (U_centers+dU/2).astype(str)
 U_centers_string = U_centers.astype(str)
 dU_string = dU.astype(str)
 
-slope_PDF_binned = np.nan*np.ones((len(U_centers),200,3,2))
+slope_PDF_binned = np.nan*np.ones((len(U_centers),num_slope_bins,3,2))
 
 dolp_gain_choices = ['no gain','lab gain','emp. gain']
 

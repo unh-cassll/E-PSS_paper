@@ -18,29 +18,27 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 
-from subroutines.utils import figure_style, slope_to_elev_wavelet
-from multiaperture import (build_eta_field, default_apertures, multiaperture_spectra,
-                           seed_aperture, sftheta_sign_anchor)
+from subroutines.utils import (figure_style, DX_M, WATER_DEPTH_M, FS_HZ,
+                               NUM_SAMPLES, epss_ewdm_grids)
+from multiaperture import (build_eta_field, recolored_long_wave, default_apertures,
+                           multiaperture_spectra, seed_aperture, sftheta_sign_anchor)
 color_list, fullwidth, fullheight, fsize = figure_style()
 
 import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
-fs, depth, num_samples = 10.0, 15.0, 6000
-dx = 2.915/32
+fs, depth, num_samples = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES
+dx = DX_M
 runs = [60, 95, 130, 165]              # ensemble for the per-aperture + stitched spectra
 snap_run = 130                         # field-snapshot run (Hm0 ~ 1 m)
 i_snap = 4600                          # snapshot frame
 krog_disc = 32                         # full-frame disc long-wave average (matches generator)
 depiston_n = 2.0                       # gated de-piston cut (matches generator)
 
-freqs = np.logspace(np.log10(0.035), np.log10(3.5), 64)
-k_grid = 2.0**np.linspace(np.log2(0.01), np.log2(np.pi/dx), 80)
-nu_grid = 2.0**np.linspace(np.log2(0.005), np.log2(2.0), 80)
+freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
 
-# Intermediate artifact (per-aperture + stitched spectra and the field snapshot) so
-# repeated calls skip the ~100 s EWDM compute; delete it or set recompute=True.
+# cached per-aperture + stitched spectra and field snapshot (~100 s to recompute)
 CACHE = path + 'aperture_field_stitch.nc'
 recompute = False
 if recompute or not os.path.exists(CACHE):
@@ -65,11 +63,10 @@ if recompute or not os.path.exists(CACHE):
     se = np.nan_to_num(np.ma.filled(fld['slope_east'][snap_run][..., :num_samples], np.nan)).astype(float)
     sn = np.nan_to_num(np.ma.filled(fld['slope_north'][snap_run][..., :num_samples], np.nan)).astype(float)
     eta, _ = build_eta_field(se, sn, depth, fs, krog_disc=krog_disc)
-    ny, nx, _ = se.shape
-    yy, xx = np.ogrid[:ny, :nx]
-    disc = (yy-(ny-1)/2.0)**2 + (xx-(nx-1)/2.0)**2 <= (krog_disc/2.0)**2
-    el = slope_to_elev_wavelet(se[disc].mean(0), sn[disc].mean(0), depth, fs)
-    Zsnap = (eta - el[None, None, :])[:, :, i_snap]      # g2s short-wave field
+    # subtract the same recolored long wave build_eta_field added, so the g2s
+    # short-wave field is zero-mean per frame
+    el = recolored_long_wave(se, sn, depth, fs, krog_disc=krog_disc)
+    Zsnap = (eta - el[None, None, :])[:, :, i_snap]      # g2s short-wave field (zero spatial mean)
     xr.Dataset(
         {'ap_mean': (('aperture', 'k'), ap_mean),
          'Fk': (('k',), Fk),
@@ -163,10 +160,8 @@ ax.grid(which='major', ls='-', lw=0.75); ax.grid(which='minor', ls=':', lw=0.75)
 ax.legend(fontsize=fsize, loc='lower right', ncol=1)
 panel_tag(ax, '(e)')
 
-# The square-aspect quad leaves vertical slack and the colorbar lowers its top, so
-# the full-height spectrum column otherwise reads taller. After the constrained-layout
-# solve, match the spectrum's vertical extent to the quad block (top-row top -> bottom-
-# row bottom), then freeze the layout so the override survives savefig.
+# after the constrained-layout solve, match the spectrum panel's vertical extent
+# to the quad block, then freeze the layout so the override survives savefig
 fig.draw_without_rendering()
 quad_top = max(a.get_position().y1 for a in fax)
 quad_bot = min(a.get_position().y0 for a in fax)

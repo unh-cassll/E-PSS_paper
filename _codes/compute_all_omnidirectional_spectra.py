@@ -13,7 +13,8 @@ import netCDF4 as nc
 
 from scipy import signal
 
-from subroutines.utils import omni_complete_spectrum
+from subroutines.utils import (omni_complete_spectrum, L_FOV_M, WATER_DEPTH_M,
+                               FS_HZ)
 
 from pathlib import Path
 
@@ -32,55 +33,44 @@ else:
 
     path = '../_data/'
 
-    ds_no = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc')
-    ds_lab = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc')
-    ds_emp = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
-
-    slope_east_no = ds_no['slope_east'][:]
-    slope_north_no = ds_no['slope_north'][:]
-
-    slope_east_lab = ds_lab['slope_east'][:]
-    slope_north_lab = ds_lab['slope_north'][:]
-
-    slope_east_emp = ds_emp['slope_east'][:]
-    slope_north_emp = ds_emp['slope_north'][:]
+    gain_names = ['no_gain', 'lab_gain', 'empirical_gain']
+    # masked entries filled with NaN (omni_complete_spectrum zeros non-finite)
+    slopes = {}
+    for name in gain_names:
+        ds = nc.Dataset(path + f'ASIT2019_wave_spectra_stats_timeseries_{name}.nc')
+        slopes[name] = (np.ma.filled(ds['slope_east'][:], np.nan),
+                        np.ma.filled(ds['slope_north'][:], np.nan))
 
     ds_other = nc.Dataset(path + 'ASIT2019_supporting_environmental_observations.nc')
 
-    elev_m_lidar = ds_other["wse_m_Riegl"][:]
+    elev_m_lidar = np.ma.filled(ds_other["wse_m_Riegl"][:], np.nan)
 
     nfft = 3000
     nperseg = 1500
-    num_freqs = np.int16(nfft / 2 + 1)
+    num_freqs = nfft // 2 + 1
     num_runs = np.size(elev_m_lidar, axis=2)
     # PSS slopes (originally 30 Hz) and Riegl lidar stored at 10 Hz; slopes downsampled 3x upstream.
-    sampling_rate_PSS = 10.0
-    sampling_rate_lidar = 10.0
+    sampling_rate_PSS = FS_HZ
+    sampling_rate_lidar = FS_HZ
     num_lidars = 3
 
     run_number = np.arange(num_runs)
 
-    water_depth_m = 15.0
+    water_depth_m = WATER_DEPTH_M
+    # per-gain slopes are full-inscribed-disc averages; divide out the disc's
+    # jinc transfer to recover the suppressed high-f (see omni_complete_spectrum)
+    aperture_diameter_m = L_FOV_M
 
     F_f_m2_Hz_lidar = np.nan * np.ones((num_freqs, num_runs, num_lidars))
-
-    F_f_m2_Hz_no_gain = np.nan * np.ones((num_freqs, num_runs))
-    F_f_m2_Hz_lab_gain = np.nan * np.ones((num_freqs, num_runs))
-    F_f_m2_Hz_empirical_gain = np.nan * np.ones((num_freqs, num_runs))
+    F_f_m2_Hz = {name: np.nan * np.ones((num_freqs, num_runs)) for name in gain_names}
 
     for run_ind in range(num_runs):
 
-        f_Hz, S = omni_complete_spectrum(slope_east_no[run_ind, :], slope_north_no[run_ind, :],
-            water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nfft, nperseg=nperseg)
-        F_f_m2_Hz_no_gain[:, run_ind] = S
-
-        f_Hz, S = omni_complete_spectrum(slope_east_lab[run_ind, :], slope_north_lab[run_ind, :],
-            water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nfft, nperseg=nperseg)
-        F_f_m2_Hz_lab_gain[:, run_ind] = S
-
-        f_Hz, S = omni_complete_spectrum(slope_east_emp[run_ind, :], slope_north_emp[run_ind, :],
-            water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nfft, nperseg=nperseg)
-        F_f_m2_Hz_empirical_gain[:, run_ind] = S
+        for name, (slope_east, slope_north) in slopes.items():
+            f_Hz, S = omni_complete_spectrum(slope_east[run_ind, :], slope_north[run_ind, :],
+                water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nfft,
+                nperseg=nperseg, aperture_diameter_m=aperture_diameter_m)
+            F_f_m2_Hz[name][:, run_ind] = S
 
         for lidar_ind in range(num_lidars):
 
@@ -89,13 +79,12 @@ else:
 
     F_f_m2_Hz_lidar = np.median(F_f_m2_Hz_lidar, axis=2)
 
+    data_vars = {f'F_f_m2_Hz_{name}': (['frequency', 'run number'], F_f_m2_Hz[name])
+                 for name in gain_names}
+    data_vars['F_f_m2_Hz_lidar'] = (['frequency', 'run number'], F_f_m2_Hz_lidar)
+
     F_f_m2_Hz_all_ds = xr.Dataset(
-        {
-            'F_f_m2_Hz_no_gain': (['frequency', 'run number'], F_f_m2_Hz_no_gain),
-            'F_f_m2_Hz_lab_gain': (['frequency', 'run number'], F_f_m2_Hz_lab_gain),
-            'F_f_m2_Hz_empirical_gain': (['frequency', 'run number'], F_f_m2_Hz_empirical_gain),
-            'F_f_m2_Hz_lidar': (['frequency', 'run number'], F_f_m2_Hz_lidar),
-        },
+        data_vars,
         coords={
             'frequency': f_Hz,
             'run number': run_number,

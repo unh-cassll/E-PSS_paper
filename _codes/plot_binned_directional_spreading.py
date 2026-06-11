@@ -13,7 +13,8 @@ import netCDF4 as nc
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 
-from subroutines.utils import figure_style, compute_mean_wave_direction_and_spreading, wind_speed_bins
+from subroutines.utils import (figure_style, compute_mean_wave_direction_and_spreading,
+                               wind_speed_bins, ewdm_low_cutoff, NUM_RUNS)
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -116,7 +117,7 @@ bigtheta = np.concatenate((theta_rad_ADCP-2*np.pi,theta_rad_ADCP,theta_rad_ADCP+
 inds_keep = (bigtheta >= -180) & (bigtheta <= 180)
 theta_deg_ADCP = bigtheta[inds_keep]
 
-num_runs = 190
+num_runs = NUM_RUNS
 
 SPREAD_EPSS_f = np.nan*np.ones((num_runs,len(f_EPSS)))
 SPREAD_EPSS_k = np.nan*np.ones((num_runs,len(k_EPSS)))
@@ -127,7 +128,10 @@ SPREAD_DIRECT_k = np.nan*np.ones((num_runs,len(k_direct)))
 
 
 def direct_dir(dirs, dens):
-    # direct-spectrum downwave-lobe directional spread (sigma_theta) per scale
+    # direct-spectrum downwave-lobe directional spread (sigma_theta) per scale.
+    # +-90 deg isolates one lobe of the 180-deg-bipolar slope spectrum (a wider
+    # window lets the opposite lobe's tails inflate sigma_theta); the EWDM uses
+    # +-120 because its elevation spectrum is sign-resolved (single-lobe).
     _, sp, _ = lobe_spread(dirs, dens, halfwidth=90.0)
     return sp
 
@@ -175,6 +179,10 @@ SPREAD_DIRECT_k_binned = band_average(wind_bin(cap90(SPREAD_DIRECT_k)))
 f_cut = 7.5
 SPREAD_DIRECT_f_binned[:, f_direct > f_cut] = np.nan
 
+# Direct sigma_theta(k) above k = 150 rad/m is untrustworthy; drop it.
+k_cut = 150.0
+SPREAD_DIRECT_k_binned[:, np.asarray(k_direct) > k_cut] = np.nan
+
 # Deep-water linear dispersion: map the ADCP frequency axis to k
 k_ADCP = (2*np.pi*f_Hz_ADCP)**2/g
 
@@ -187,26 +195,20 @@ colors = [cmap(j) for j in np.linspace(0,1,len(U_centers))]
 
 # Horizontal axis limits (full range from plot_binned_omnispect)
 f_lims = [1e-2,2e1]
-k_lims = [1e-2,1e3]
+k_lims = [1e-2,2e2]
 
 lw_thick = 2.5
 lw_thin = 1.5
 
-# E-PSS reliability boundaries (per axis; from plot_binned_omnispect): EWDM trusted
-# at/below the boundary, direct slope spectra at/above; each faded beyond.
-f_bound = 0.7
-k_bound = 2.0
+# E-PSS reliability boundaries (per axis): EWDM trusted at/below the boundary,
+# direct slope spectra at/above; each faded beyond. f_bound is the deep-water
+# dispersion partner of k_bound.
+f_bound = 1.0
+k_bound = 4.0
 alpha_faded = 0.30
 
-# Low-scale EWDM cutoff: below this the EWDM elevation spectrum overshoots the Riegl
-# lidar (1/k^2 slope-noise gain) to energy SNR < 0.5; fade the EWDM below it. From
-# lambda = 73*L_FOV via finite-depth dispersion (h = 15 m).
-h_m = 15.0
-L_FOV_m = 2.915
-n_frame_low = 73            # lambda/L_FOV at energy SNR = 0.5 (EWDM vs Riegl lidar)
-k_low = 2*np.pi/(n_frame_low*L_FOV_m)
-omega_low = np.sqrt(g*k_low*np.tanh(k_low*h_m))
-f_low = omega_low/(2*np.pi)
+# Low-scale EWDM trust cutoff; fade the EWDM below it
+k_low, f_low = ewdm_low_cutoff()
 
 
 def trusted_segments(x, bound, is_ewdm, low_bound=None):

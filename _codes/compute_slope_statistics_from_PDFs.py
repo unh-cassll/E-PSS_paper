@@ -21,12 +21,13 @@ pathname = Path(output_file_name)
 
 path = '../_data/'
 
-# Inputs; recompute whenever any is newer than the cached output
+# Inputs (including this script); recompute whenever any is newer than the output
 input_files = [
     path + 'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc',
     path + 'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc',
     path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc',
     path + 'ASIT2019_supporting_environmental_observations.nc',
+    __file__,
 ]
 
 
@@ -58,12 +59,16 @@ else:
     ustar_m_s = ds_other["EC_ustar_m_s"][:]
     z_m_above_water = ds_other["EC_z_m_above_water"][:]
     
-    U10_m_s = ustar_m_s/kappa*np.log10(10.0/z_m_above_water) + U_m_s
-    
-    COARE_Wdir_vec = np.reshape(ds_other["COARE_Wdir"][:],(190,1,1))
-    
-    slope_north = np.nan*np.ones((190,6000,3))
-    slope_east = np.nan*np.ones((190,6000,3))
+    # Log-law height adjustment to 10 m (natural log)
+    U10_m_s = ustar_m_s/kappa*np.log(10.0/z_m_above_water) + U_m_s
+
+    num_runs = len(U10_m_s)
+    num_samples = ds_no["slope_east"].shape[1]
+
+    COARE_Wdir_vec = np.reshape(ds_other["COARE_Wdir"][:],(num_runs,1,1))
+
+    slope_north = np.nan*np.ones((num_runs,num_samples,3))
+    slope_east = np.nan*np.ones((num_runs,num_samples,3))
     
     slope_north[:,:,0] = ds_no["slope_north"][:]
     slope_north[:,:,1] = ds_lab["slope_north"][:]
@@ -76,7 +81,7 @@ else:
     slope_crosswind_long = np.cos(COARE_Wdir_vec*np.pi/180)*slope_east - np.sin(COARE_Wdir_vec*np.pi/180)*slope_north
     slope_upwind_long = np.sin(COARE_Wdir_vec*np.pi/180)*slope_east + np.cos(COARE_Wdir_vec*np.pi/180)*slope_north
     
-    mss_long = np.nan*np.ones((190,3,2))
+    mss_long = np.nan*np.ones((num_runs,3,2))
     mss_long[:,:,0] = np.var(slope_crosswind_long,axis=1)
     mss_long[:,:,1] = np.var(slope_upwind_long,axis=1)
     
@@ -93,7 +98,7 @@ else:
     mss_upwind_lab = ds_lab["mss_upwind"][:]
     mss_upwind_emp = ds_emp["mss_upwind"][:]
     
-    mss = np.nan*np.ones((190,3,2))
+    mss = np.nan*np.ones((num_runs,3,2))
     
     mss[:,0,0] = mss_crosswind_no
     mss[:,1,0] = mss_crosswind_lab
@@ -102,9 +107,7 @@ else:
     mss[:,0,1] = mss_upwind_no
     mss[:,1,1] = mss_upwind_lab
     mss[:,2,1] = mss_upwind_emp
-    
-    num_runs = len(U10_m_s)
-    
+
     slope_stats_array = np.nan*np.ones((num_runs,7,3))
     slope_stats_output_names = ['c21','c03','c40','c04','c22','R_squared','RMSE']
 

@@ -31,7 +31,11 @@ def k_dispersion(f, depth):
     w = 2 * np.pi * np.asarray(f, float)
     k = w**2 / GRAV
     for _ in range(100):
-        k = w**2 / (GRAV * np.tanh(np.clip(k * depth, 1e-9, 50.0)))
+        k_new = w**2 / (GRAV * np.tanh(np.clip(k * depth, 1e-9, 50.0)))
+        converged = np.allclose(k_new, k, rtol=1e-12, atol=0.0)
+        k = k_new
+        if converged:
+            break
     return k
 
 
@@ -61,10 +65,8 @@ def _wrap180(x):
 
 # --- array geometry -----------------------------------------------------------
 def erode_valid(valid):
-    """1-px erosion of a boolean footprint: keep only pixels whose 4-neighbours
-    are all inside it, so a central-difference gradient at any kept pixel stays
-    within the footprint (border pixels dropped). Used to make staff gradients
-    finite on a footprint with NaN gaps (e.g. a stereo-coverage wedge)."""
+    """1-px erosion of a boolean footprint: keep pixels whose 4-neighbours are
+    all inside it, so central-difference gradients stay within the footprint."""
     ev = valid.copy()
     ev[1:-1, 1:-1] &= (valid[:-2, 1:-1] & valid[2:, 1:-1]
                        & valid[1:-1, :-2] & valid[1:-1, 2:])
@@ -74,18 +76,13 @@ def erode_valid(valid):
 
 
 def seed_aperture(ny, nx, dx, extent_px, n_staff, seed, valid=None):
-    """Random virtual staffs in a centered window. extent_px is the side in
-    pixels: a scalar gives a square window, a (rows, cols) pair gives a
-    rectangular one (use the latter to span a long FOV axis for a longer
-    baseline / lower-k reach). Column axis West-positive: East=(cxp-j)dx,
-    North=(cyp-i)dx.
+    """Random virtual staffs in a centered window. extent_px: window side in
+    pixels (scalar = square, (rows, cols) = rectangular). Column axis
+    West-positive: East=(cxp-j)dx, North=(cyp-i)dx.
 
-    valid (ny,nx bool): if given, staffs are drawn only from True pixels, so an
-    arbitrary footprint (e.g. a stereo-coverage wedge with NaN gaps) can host the
-    array. The window keeps its extent_px size but is recentred on the valid
-    centroid so it overlaps the footprint; staffs are sampled without replacement
-    from the valid pixels inside it (with replacement only if it holds fewer than
-    n_staff). valid=None is a plain uniform draw in the centered window. Returns
+    valid (ny,nx bool): if given, draw staffs only from True pixels; the window
+    is recentred on the valid centroid and sampled without replacement (with
+    replacement only if it holds fewer than n_staff). Returns
     (ii, jj, px, py, b_max)."""
     rng = np.random.default_rng(seed)
     ey, ex = extent_px if isinstance(extent_px, (tuple, list)) else (extent_px, extent_px)
@@ -120,12 +117,9 @@ def aperture_band(b_max, lo_frac=0.30, hi_frac=1.0):
 
 
 def _log_edge_taper(grid, lo, hi, width):
-    """Cosine edge weight on a log2 grid: 1 across the interior of [lo, hi],
-    smoothly ->0 over `width` octaves at each edge, exactly 0 outside. Used to
-    blend overlapping aperture bands so each aperture's drooping anti-alias tail
-    is down-weighted at the stitch (removes the per-ceiling microdivots). In a
-    single-aperture region the weight cancels in the normalised average, so the
-    level is unchanged; it only matters where bands overlap."""
+    """Cosine edge weight on a log2 grid: 1 inside [lo, hi], ->0 over `width`
+    octaves at each edge, 0 outside. Down-weights each aperture's anti-alias
+    tail where bands overlap; cancels in single-aperture regions."""
     lg = np.log2(grid)
     llo, lhi = np.log2(lo), np.log2(hi)
     ramp = np.clip(np.minimum((lg - llo) / width, (lhi - lg) / width), 0.0, 1.0)
@@ -135,10 +129,7 @@ def _log_edge_taper(grid, lo, hi, width):
 
 def default_apertures():
     """Coarse->tight staggered ladder (name, extent_px), ~1.3x spacing so every
-    octave in k is covered by >=2 apertures with no single-aperture coverage gap
-    (each aperture's anti-alias ceiling falls inside the next-coarser aperture's
-    trusted band). Avoids the sharp single-aperture stitch notch near k~1 rad/m
-    that a 2x-spaced 4-aperture set leaves at the broad aperture's ceiling."""
+    k octave is covered by >=2 apertures (no single-aperture stitch notch)."""
     return [('A0', 28), ('A1', 22), ('A2', 17), ('A3', 13),
             ('A4', 10), ('A5', 8), ('A6', 6), ('A7', 4)]
 
@@ -207,64 +198,39 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
                           sign_anchor=None, sign_anchor_rmin=0.15, sign_coh_min=0.6):
     """Composite multi-aperture elevation directional spectra on the array-
     measured (WDM) wavenumber, binned with ewdm.density and stitched over each
-    aperture's trusted band. Power pre-scaled so int S(f) df = var(eta).
+    aperture's trusted band [lo_frac/b_max, hi_frac*pi/b_max]. Power pre-scaled
+    so int S(f) df = var(eta).
 
     Returns omni S(f), F(k), Q(nu) and polar F(f,theta), F(k,theta), Q(nu,theta);
     theta is deg CW-from-N.
 
-    Radial binning -> ewdm.density.estimate_radial_distribution.
-    radial_bandwidth_mode: 'relative' (constant fractional log-space kernel of
-    width rel_bandwidth), 'histogram' (none), or 'absolute' (upstream fixed
-    width). power_weighted=True bins the variance (weights F(k)/Q(nu) by
-    per-sample power), giving the steep short-wave slope; S(f)/F(f,theta) stay
-    unweighted.
+    radial_bandwidth_mode: 'relative' (log-space kernel of fractional width
+    rel_bandwidth), 'histogram' (none), or 'absolute' (upstream fixed width).
+    power_weighted=True bins variance rather than occurrence into F(k)/Q(nu);
+    S(f)/F(f,theta) stay unweighted.
 
-    High-k limit: each aperture trusted to its anti-alias ceiling pi/b_max
-    (b_max = longest realised baseline).
+    stitch_taper: cosine edge-taper width (octaves) blending overlapping aperture
+    bands at the stitch; 0/None = hard in-band indicator.
 
-    stitch_taper: cosine edge-taper width (octaves) for the multi-aperture stitch.
-    Each aperture is down-weighted toward its band edges so its drooping anti-alias
-    tail does not pollute the count-averaged overlap (smooths the per-ceiling
-    microdivots). >0 enables it (default 0.7); 0/None falls back to the hard
-    in-band indicator with integer overlap counts.
+    solve_eta: optional field (same shape as eta) used only for the wavevector
+    solve; power/variance still come from eta. Pass the de-pistoned field to keep
+    the uniform long wave out of the cross-staff phases (else |k| biases low).
 
-    solve_eta: optional alternative elevation field (same shape as eta) used ONLY
-    for the array wavevector solve (kmag); power/variance still come from eta.
-    Pass the de-pistoned g2s short-wave field to keep the spatially-uniform long
-    wave out of the cross-staff phase differences (which otherwise biases |k| low).
+    valid: optional (ny,nx) boolean footprint; eta may carry NaN outside it.
+    Variance is taken over the footprint and staffs are drawn from its
+    1-px-eroded pixels, so the array spans the whole footprint.
 
-    valid: optional (ny,nx) boolean footprint. When given, eta may carry NaN
-    outside it (e.g. a stereo-coverage wedge): variance is taken over the
-    footprint and every aperture's staffs are drawn from the valid pixels (1-px
-    eroded so gradients stay inside), letting the array span the whole footprint
-    rather than the largest inscribed rectangle -> longer baselines, lower-k reach.
+    antialias_gate: an aperture whose ceiling khi = pi/b_max is below
+    antialias_mult x the spectral-peak k aliases shorter waves to spuriously low
+    |k|; when True it deposits onto k/nu only frequencies whose dispersion
+    k <= khi. S(f)/F(f,theta) unaffected. Default off (E-PSS small FOV); enable
+    when the widest baseline exceeds the dominant wavelength.
 
-    antialias_gate: a WIDE aperture (anti-alias ceiling khi = pi/b_max below
-    antialias_mult x the spectral-peak k) under-resolves waves shorter than its
-    ceiling -- their cross-staff phase wraps and the LS wavevector aliases to
-    spuriously low |k|, piling false energy at the bottom of F(k)/Q(nu) (the
-    spectrum's k/nu marginals then peak at the grid edge, not the swell peak).
-    When True, such an aperture contributes to the k / nu deposits only the
-    frequencies whose dispersion k <= khi (it never sees a wave it would alias);
-    the energetic peak is placed by the tighter apertures that actually resolve
-    it. S(f)/F(f,theta) (temporal-CWT frequency path, no spatial aliasing) are
-    unaffected. This is distinct from the nu_f_lim/nu_k_lim Q(nu) gate below.
-    Default off (E-PSS small FOV does not alias); enable for a large FOV whose
-    widest baseline exceeds the dominant wavelength.
-
-    nu_f_lim, nu_k_lim: (lo, hi) gate applied ONLY to the Q(nu)/Q(nu,theta) deposit
-    (F(k), S(f) unaffected), so low-confidence out-of-band (f, |k|) samples cannot
-    pollute Q(nu) -- nu = |k|/(2*pi*f) sends unreliable high-|k| energy to high nu.
-    'auto' sets |k| in [2*pi/(50*b_max), k_FOV], high cut k_FOV=2*pi/(nx*dx) the
-    frame-fundamental wavenumber (= the direct spectrum's lowest k); its dispersion
-    image nu=sqrt(k_FOV/g) is the EWDM/direct trust boundary, so the gate cleans the
-    non-dispersive overshoot exactly up to where EWDM hands off to the direct. f is
-    the dispersion band of that |k| range. Pass a tuple to override or None to
-    disable a gate. NOTE: the k_FOV cut suits a SMALL FOV (frame smaller than the
-    dominant wavelength, as in E-PSS) where k_FOV lands mid-spectrum at the trust
-    boundary; for a LARGE FOV (e.g. stereo-video elevation) k_FOV sits below the
-    spectral peak, so the cut belongs at the high-k resolution/confidence limit
-    instead -- set nu_k_lim explicitly there (a different 'auto' mode is TBD).
+    nu_f_lim, nu_k_lim: (lo, hi) gates applied only to the Q(nu)/Q(nu,theta)
+    deposit. 'auto': |k| in [2*pi/(50*b_max), k_FOV] with k_FOV = 2*pi/(nx*dx)
+    (the EWDM/direct trust boundary for a small FOV), f = that range's dispersion
+    band. For a large FOV set nu_k_lim explicitly at the high-k confidence limit.
+    Tuple overrides; None disables a gate.
     """
     ny, nx, T = eta.shape
     if apertures is None:
@@ -273,9 +239,8 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
         var_eta = eta.var(axis=2).mean()
         seed_valid = None
     else:
-        # eta may carry NaN outside `valid` (e.g. a stereo-coverage wedge):
-        # variance over the footprint only, and staffs drawn from a 1-px eroded
-        # mask so every gradient central difference stays inside the footprint.
+        # variance over the footprint only; staffs drawn from a 1-px eroded mask
+        # so gradient central differences stay inside it
         var_eta = float(np.nanmean(np.where(valid, eta.var(axis=2), np.nan)))
         seed_valid = erode_valid(valid)
     gy, gx = np.gradient(eta, dx, axis=(0, 1))
@@ -289,8 +254,8 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
         es = np.stack([eta[i, j, :] for i, j in zip(ii, jj)])
         es = es - es.mean(1, keepdims=True)
         We = cwt_stack(es, freqs, fs, omega0)
-        # wavevector solve on the de-pistoned field if supplied (keeps the uniform
-        # long wave out of the phase differences); power P still comes from We(eta)
+        # wavevector solve on the de-pistoned field if supplied; power P still
+        # comes from We(eta)
         if solve_eta is not None:
             ek = np.stack([solve_eta[i, j, :] for i, j in zip(ii, jj)])
             Wk = cwt_stack(ek - ek.mean(1, keepdims=True), freqs, fs, omega0)
@@ -368,10 +333,7 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
     # one variance calibration (full-FOV power) so int S(f) df = var_eta
     cal = var_eta / np.trapz(ap[0]['P'].mean(1), freqs)
 
-    # anti-alias gate: a wide aperture (ceiling khi below antialias_mult x the
-    # peak k) aliases waves shorter than its ceiling to spuriously low |k|; when
-    # enabled it bins only frequencies whose dispersion k <= khi (longer than it
-    # can alias), so the energetic peak is placed by the tighter apertures only.
+    # anti-alias gate threshold (see docstring)
     kdisp = k_dispersion(freqs, depth)
     gate_k = antialias_mult * float(k_dispersion(freqs[pk], depth))
 
@@ -380,10 +342,8 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
     # f window = the dispersion band of that k range. Only Q(nu) is gated.
     bmx = [d['bmax'] for d in ap]
     if nu_k_lim == 'auto':
-        # high cut = k_FOV = frame-fundamental wavenumber (= direct spectrum's
-        # lowest k); its dispersion image nu=sqrt(k_FOV/g) is the EWDM/direct
-        # trust boundary, so the gate cleans the non-dispersive overshoot up to
-        # exactly where EWDM hands off to the direct.
+        # high cut = k_FOV, the frame-fundamental wavenumber (EWDM/direct trust
+        # boundary)
         nu_k_lim = (2 * np.pi / (50.0 * max(bmx)), 2 * np.pi / (nx * dx))
     if nu_f_lim == 'auto':
         _fk = lambda kk: float(np.sqrt(GRAV * kk * np.tanh(np.clip(kk * depth, 1e-9, 50))) / (2 * np.pi))
@@ -396,11 +356,8 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
     Qnd = np.zeros((len(nu_grid), len(bins_dir)))
     ap_ok_omni = []   # per-aperture omnidirectional F(k) (full grid), for diagnostics
     for d in ap:
-        # anti-alias frequency mask: where this wide aperture would alias
-        # (dispersion k above its ceiling), send the measured |k| off the k and nu
-        # grids so the aliased low-|k| samples never deposit -- the power array is
-        # kept intact (power-weighting unperturbed), same mechanism as the nu gate.
-        # S(f)/F(f,theta) (frequency-direction path) use the ungated ap[0] below.
+        # anti-alias frequency mask: send would-alias samples off the k/nu grids
+        # so they never deposit; power kept intact (power-weighting unperturbed)
         fok = (kdisp <= d['khi']) if (antialias_gate and d['khi'] < gate_k) \
             else np.ones(len(freqs), bool)
         power = xr.DataArray(d['P'] * cal, dims=['frequency', 'time'], coords=coords)
@@ -411,9 +368,8 @@ def multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
                                           dd, kappa, bandwidth=rel_bandwidth,
                                           bandwidth_mode=radial_bandwidth_mode,
                                           power_weighted=power_weighted)
-        # gate the Q(nu) deposit to the trusted (f, k) window (F(k)/S(f) unaffected):
-        # send out-of-window samples far off the nu grid so they drop from the
-        # deposit (keeps power intact, so power-weighting is unperturbed)
+        # gate the Q(nu) deposit to the trusted (f, k) window: send out-of-window
+        # samples off the nu grid (F(k)/S(f) unaffected, power kept intact)
         nu_vals = d['kmag'] / (2 * np.pi * freqs[:, None])
         if nu_f_lim is not None or nu_k_lim is not None:
             keep = np.ones(nu_vals.shape, bool)

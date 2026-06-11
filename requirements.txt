@@ -1,10 +1,10 @@
-numpy
+# numpy >= 2 required (np.trapezoid, np.asin)
+numpy>=2
 xarray
 pandas
 netCDF4
 
 scipy
-scikit-learn
 scientimate
 
 matplotlib

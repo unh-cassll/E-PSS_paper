@@ -10,9 +10,7 @@ import xarray as xr
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import mean_squared_error
-
-from subroutines.utils import *
+from subroutines.utils import figure_style, scatter_metrics, draw_metrics_box, write_tex_macros
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -21,18 +19,18 @@ warnings.filterwarnings("ignore")
 
 path = '../_data/'
 
-f_lp = 0.4
-f_hp = 0.10   # Hz; excludes 0.08-0.10 Hz band contaminated by 1/k²-amplified low-f slope drift
+f_lp = 0.5    # Hz; jinc-corrected single disc is valid to ~lambda=FOV (2.915 m -> ~0.7 Hz)
+f_hp = 0.08   # Hz; lower admits 1/k^2-amplified low-f noise
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
-    
+
 mask = np.zeros((len(ds_omnispect['frequency']),1))
 mask[(ds_omnispect['frequency'][:]>f_hp)&(ds_omnispect['frequency'][:]<f_lp)] = 1
 df = np.median(np.diff(ds_omnispect['frequency'][:]))
 
 Hm0_lidar = 4*np.sqrt(np.sum(mask*ds_omnispect['F_f_m2_Hz_lidar'][:].data,axis=0)*df)
 
-inds_exclude = (Hm0_lidar < 0.2) | (Hm0_lidar > 2.5)
+inds_exclude = (Hm0_lidar < 0.2) | (Hm0_lidar > 5)
 Hm0_lidar[inds_exclude] = np.nan
 
 Hm0_no_gain = 4*np.sqrt((np.sum(mask*ds_omnispect['F_f_m2_Hz_no_gain'][:].data,axis=0)*df))
@@ -51,21 +49,9 @@ data = pd.DataFrame({
     'DoLP gain': category
 })
 
-# Compute R², RMSE, slope, and intercept for each gain category
-metrics = {}
-proxy_estimates = ['none', 'lab', 'empirical']
-x = Hm0_lidar
-for Hm0_estimate in proxy_estimates:
-    Y = data[data["DoLP gain"] == Hm0_estimate]
-    y = Y.EPSS
-    inds_keep = (~np.isnan(x) & ~np.isnan(y))
-    rmse = np.sqrt(mean_squared_error(x[inds_keep], y[inds_keep]))
-    correlation_matrix = np.corrcoef(x[inds_keep], y[inds_keep])
-    correlation_coefficient = correlation_matrix[0,1]
-    p = np.polyfit(x[inds_keep], y[inds_keep],1)
-    slope = p[0]
-    intercept = p[1]
-    metrics[Hm0_estimate] = (correlation_coefficient, rmse, slope, intercept)
+# (R^2, RMSE, slope, bias) per gain category
+metrics = [scatter_metrics(Hm0_lidar, y)
+           for y in (Hm0_no_gain, Hm0_lab_gain, Hm0_emp_gain)]
 
 g = sns.lmplot(
     data=data,
@@ -79,68 +65,23 @@ g = sns.lmplot(
 
 plt.plot([0,5],[0,5],'--',color='k')
 
-r_values = [metrics['none'][0], metrics['lab'][0], metrics['empirical'][0]]
-r2_values = [r**2 for r in r_values]
-rmse_values = [metrics['none'][1], metrics['lab'][1], metrics['empirical'][1]]
-slope_values = [metrics['none'][2], metrics['lab'][2], metrics['empirical'][2]]
-offset_values = [metrics['none'][3], metrics['lab'][3], metrics['empirical'][3]]
-colors = ['#4C2882', '#367588', '#A52A2A']
-
 # Export the empirical-gain headline metrics as LaTeX macros for paper.tex
+r2_emp, rmse_emp, slope_emp, bias_emp = metrics[2]
 write_tex_macros('Hm0_values.tex', {
-    'HmRtwoEmp':  f'{r2_values[2]:.2f}',
-    'HmRMSEemp':  f'{rmse_values[2]:.2f}',
-    'HmSlopeEmp': f'{slope_values[2]:.2f}',
-    'HmBiasEmp':  f'{offset_values[2]:.2f}',
+    'HmRtwoEmp':  f'{r2_emp:.2f}',
+    'HmRMSEemp':  f'{rmse_emp:.2f}',
+    'HmSlopeEmp': f'{slope_emp:.2f}',
+    'HmBiasEmp':  f'{bias_emp:.2f}',
 }, source='plot_Hm0_scatterplots_lidar_EPSS.py')
 
-r2_line = 'R²'
-    
-rmse_line = 'RMSE'
+draw_metrics_box(plt.gca(), metrics, ['none', 'lab', 'emp'], color_list[:3],
+                 ('m', 'm'), box_xy=(0.013, 0.713), box_w=0.69, box_h=0.277,
+                 col_step=0.15, unit_dx=0.12, fsize=fsize)
 
-slope_line = 'slope'
-
-offset_line = 'bias'
-
-textstr = r2_line + '\n' + rmse_line + '\n' + slope_line + '\n' + offset_line
-equals_str = ' = ' + '\n' + ' = ' + '\n' + ' = ' + '\n' + ' = '
-
-plt.gca().add_patch(plt.Rectangle((0.04, 2.14), 2.07, 0.83, color='k', alpha=0.95, edgecolor='k',linewidth=2))
-plt.gca().add_patch(plt.Rectangle((0.04, 2.14), 2.07, 0.83, color='w', alpha=0.95, edgecolor='k',linewidth=0.5))
-
-# Metrics textbox (axes-fraction coordinates)
-x_position = 0.02
-y_position = 0.93
-delta_x = [0.03,0.03,0.04]
-plt.text(x_position, y_position, textstr, transform=plt.gca().transAxes, fontsize=fsize,
-        verticalalignment='top')
-plt.text(x_position+0.12, y_position, equals_str, transform=plt.gca().transAxes, fontsize=fsize,
-        verticalalignment='top')
-        
-x_position_start = x_position
-        
-proxy_labels = proxy_estimates.copy()
-proxy_labels[2] = 'emp'
-
-# Per-category metric columns (each a single multi-line string so the rows share
-# the label/'=' line spacing and stay aligned down the column)
-x_position += 0.05
-for r2, rmse, slope, offset, color, proxy, delta_x_val in zip(r2_values, rmse_values, slope_values, offset_values, colors, proxy_labels, delta_x):
-    x_position += 0.15
-    plt.text(x_position+delta_x_val+0.01, y_position+0.05, proxy, color=color, transform=plt.gca().transAxes, fontsize=fsize,
-             verticalalignment='top',horizontalalignment='center')
-    plt.text(x_position, y_position, f'{r2:.2f}\n{rmse:.2f}\n{slope:.2f}\n{offset:.2f}', color=color,
-             transform=plt.gca().transAxes, fontsize=fsize, verticalalignment='top')
-
-x_position += 0.12
-# units on the dimensional rows (RMSE, bias); blank lines preserve the row spacing
-plt.text(x_position, y_position, '\nm\n\nm', color='k', transform=plt.gca().transAxes, fontsize=fsize,
-         verticalalignment='top')
-    
-plt.xticks(np.linspace(0,3,7))
-plt.yticks(np.linspace(0,3,7))
-plt.xlim(0,3)
-plt.ylim(0,3)
+plt.xticks(np.linspace(0,4,9))
+plt.yticks(np.linspace(0,4,9))
+plt.xlim(0,4)
+plt.ylim(0,4)
 plt.xlabel(r'$H_{m0}$, lidar [m]')
 plt.ylabel(r'$H_{m0}$, E-PSS [m]')
 

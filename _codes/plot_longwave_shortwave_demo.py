@@ -11,16 +11,16 @@ import netCDF4 as nc
 from scipy import signal
 from matplotlib import pyplot as plt
 
-from subroutines.utils import figure_style, slope_to_elev_wavelet
-from multiaperture import build_eta_field
+from subroutines.utils import figure_style, WATER_DEPTH_M, FS_HZ
+from multiaperture import build_eta_field, recolored_long_wave
 color_list, fullwidth, fullheight, fsize = figure_style()
 
 import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
-fs = 10.0
-depth = 15.0
+fs = FS_HZ
+depth = WATER_DEPTH_M
 run_ind = 180         # ~1 m Hs run; inferred long wave is in phase with the lidar here
 krog_disc = 32         # full-frame disc (matches the archive / aperture figure)
 
@@ -37,7 +37,8 @@ yy, xx = np.ogrid[:ny, :nx]
 disc = (yy-(ny-1)/2.0)**2 + (xx-(nx-1)/2.0)**2 <= (krog_disc/2.0)**2
 sE_disc = SxF[disc].mean(0)            # disc-averaged slope timeseries (long-wave input)
 sN_disc = SyF[disc].mean(0)
-eta_long = slope_to_elev_wavelet(sE_disc, sN_disc, depth, fs)
+# same recolored long wave build_eta_field added, so Z is the pure short wave
+eta_long = recolored_long_wave(SxF, SyF, depth, fs, krog_disc=krog_disc)
 Z = eta - eta_long[None, None, :]      # g2s short-wave elevation field
 
 # Riegl lidar reference, low-passed to the long wave and shifted into phase

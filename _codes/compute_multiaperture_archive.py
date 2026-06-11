@@ -18,18 +18,17 @@ warnings.filterwarnings("ignore")
 
 from multiaperture import (build_eta_field, default_apertures, multiaperture_spectra,
                            sftheta_sign_anchor)
-from subroutines.utils import slope_to_elev_wavelet
+from subroutines.utils import (slope_to_elev_wavelet, DX_M, WATER_DEPTH_M, FS_HZ,
+                               NUM_RUNS, NUM_SAMPLES, epss_ewdm_grids)
 
 path = '../_data/'
 out = '../_dustbin/multiaperture_Fk_longwave.nc'
-fs, depth, num_samples, num_runs = 10.0, 15.0, 6000, 190
-dx = 2.915/32
+fs, depth, num_samples, num_runs = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES, NUM_RUNS
+dx = DX_M
 krog_disc, depiston_n = 32, 2.0
 n_workers = 16
 
-freqs = np.logspace(np.log10(0.035), np.log10(3.5), 64)
-k_grid = 2.0**np.linspace(np.log2(0.01), np.log2(np.pi/dx), 80)
-nu_grid = 2.0**np.linspace(np.log2(0.005), np.log2(2.0), 80)
+freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
 ap = default_apertures()
 ap_names = [n for n, e in ap]
 

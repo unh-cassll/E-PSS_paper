@@ -15,7 +15,7 @@ figures: aperture_field_stitch \
 	slope_elev_timeseries_and_spectra \
 	slope_PDFs \
 	slope_stats \
-	T_E_scatterplots_lidar_EPSS \
+	Tm02_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
 
 aperture_field_stitch: plot_aperture_field_stitch.py
@@ -38,6 +38,7 @@ comparison_of_directional_information: plot_comparison_of_directional_informatio
 	@python3 plot_comparison_of_directional_information.py
 	@echo "saved delta_theta_nought.pdf to file"
 	@echo "saved directional_spreading_comparison.pdf to file"
+	@echo "saved directional_values.tex to file"
 
 directional_spectra: plot_directional_spectra.py
 	@python3 plot_directional_spectra.py
@@ -74,9 +75,10 @@ slope_stats: plot_slope_stats.py
 	@echo "saved mss_upwind_crosswind.pdf to file"
 	@echo "saved slope_distribution_GC_coeffs.pdf to file"
 
-T_E_scatterplots_lidar_EPSS: plot_T_E_scatterplots_lidar_EPSS.py
-	@python3 plot_T_E_scatterplots_lidar_EPSS.py
-	@echo "saved T_E_comparison_lidar_epss.pdf to file"
+Tm02_scatterplots_lidar_EPSS: plot_Tm02_scatterplots_lidar_EPSS.py
+	@python3 plot_Tm02_scatterplots_lidar_EPSS.py
+	@echo "saved Tm02_comparison_lidar_epss.pdf to file"
+	@echo "saved Tm02_values.tex to file"
 
 wave_measurement_stommel_diagram: plot_wave_measurement_stommel_diagram.py
 	@python3 plot_wave_measurement_stommel_diagram.py

@@ -198,7 +198,7 @@ ax1.set_ylabel('f [Hz]')
 ax1.text(0.93,0.90,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
 ax1.set(title="MEM, ADCP")
 
-pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:]/2.0,vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax2.pcolormesh(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax2.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
 ax2.set_yscale('log')
