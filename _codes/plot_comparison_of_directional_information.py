@@ -30,8 +30,7 @@ ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
 
-# Dataset direction is radians; the spreading estimator wraps in degrees, so view
-# the axis in degrees here (F_f_d stays per-radian; only ratios/shapes are used).
+# convert direction axis to degrees for spreading estimator (F_f_d stays per-radian)
 ds_EPSS_spect = ds_EPSS_spect.assign_coords(direction=np.degrees(ds_EPSS_spect['direction']))
 
 ds_omnispect = xr.open_dataset(path+'ASIT2019_omnidirectional_spectra.nc')
@@ -42,7 +41,7 @@ f_Hz_ADCP = ds_other['f_Hz_ADCP'][:]
 theta_rad_ADCP = ds_other['theta_rad'][:]
 Fftheta_m2_Hz_rad_ADCP = ds_other['F_f_theta_m2_Hz_rad_ADCP'][:]
 
-U10_m_s = ds_other["COARE_U10"][:]
+U10_m_s = ds_other["U10_best"][:]
 winddir_deg = ds_other["COARE_Wdir"][:]
 
 theta_rad_ADCP = theta_rad_ADCP[np.arange(0,len(theta_rad_ADCP)-1)]
@@ -76,19 +75,71 @@ f_cut_low = 0.03
 f_cut_high = 0.4
 f_cut_high_EPSS = 0.7          # E-PSS directional spreading trusted to higher f than MWD/Tm01
 
-# Trusted frequency band for sigma_theta(f) display: faded below the shared low
-# bound f_low (EWDM low-scale cutoff, matches plot_binned_omnispect); E-PSS solid
-# above it, ADCP solid only up to f_ADCP_trust_high (faded beyond).
+# trusted band for sigma_theta(f): faded below f_low (EWDM low-scale cutoff);
+# ADCP solid only to f_ADCP_trust_high [Hz], E-PSS solid above
 f_ADCP_trust_high = 0.25
 _, f_low = ewdm_low_cutoff()
 alpha_faded = 0.30             # opacity of each estimate beyond its trusted band
 
-f_Hz_copy = f_Hz_omni.copy()
-f_Hz_copy[0] = np.nan
-f_E = (np.nansum(f_Hz_copy.reshape(len(f_Hz_copy),1)**-1*F_f_m2_Hz_omni,axis=0)/np.nansum(F_f_m2_Hz_omni,axis=0))**-1
+# f_m02 = sqrt(m2/m0) over [F_HP, F_LP] [Hz]; matches Tm02 figure band
+F_HP, F_LP = 0.10, 0.7
+def f_m02_of(freq, Sf):
+    freq = np.asarray(freq, float)
+    Sf = np.asarray(Sf, float)
+    sh = (-1,) + (1,)*(Sf.ndim-1)
+    band = ((freq >= F_HP) & (freq <= F_LP)).astype(float).reshape(sh)
+    f2 = (freq**2).reshape(sh)
+    return np.sqrt(np.nansum(band*f2*Sf, axis=0)/np.nansum(band*Sf, axis=0))
+f_m02 = f_m02_of(f_Hz_omni, F_f_m2_Hz_omni)
+
+SIGMA_HALFWIDTH = 90.0   # single-lobe sigma_theta window half-width [deg]; +-90 excludes the direct mirror lobe
+
+
+def _smooth5(x, n=smoothnum):
+    # centered n-point rolling median (NaN-aware, edge-shrinking) over the scale axis
+    x = np.asarray(x, float)
+    m = len(x)
+    out = x.copy()
+    for i in range(m):
+        w = x[max(0, i-n//2):min(m, i+n//2+1)]
+        w = w[np.isfinite(w)]
+        if w.size:
+            out[i] = np.median(w)
+    return out
+
+
+def lobe_spread(dirs_deg, dens, halfwidth=SIGMA_HALFWIDTH):
+    # single-lobe RMS directional spread sigma_theta(scale); +-halfwidth deg isolates dominant lobe
+    th = np.radians(np.asarray(dirs_deg))
+    E = np.nan_to_num(dens)
+    nsc = E.shape[0]
+    sig = np.full(nsc, np.nan)
+    h = np.radians(halfwidth)
+    for j in range(nsc):
+        D = E[j]
+        s = D.sum()
+        if s <= 0:
+            continue
+        a = (D*np.cos(th)).sum()
+        b = (D*np.sin(th)).sum()
+        d = np.angle(np.exp(1j*(th - np.arctan2(b, a))))
+        Dk = D*(np.abs(d) <= h)
+        sk = Dk.sum()
+        if sk <= 0:
+            continue
+        thc = np.arctan2((Dk*np.sin(th)).sum(), (Dk*np.cos(th)).sum())
+        d2 = np.angle(np.exp(1j*(th - thc)))
+        sig[j] = np.degrees(np.sqrt((Dk*d2**2).sum()/sk))
+    return sig
+
+
+def lobe_sigma(F):
+    # single-lobe sigma_theta(scale) from xarray (scale, direction) [deg direction coord]; smoothed
+    return _smooth5(lobe_spread(F['direction'].data, np.nan_to_num(F.data)))
+
 
 for run_ind in np.arange(0,num_runs):
-        
+
     Fftheta_m2_Hz_rad_ADCP_particular = Fftheta_m2_Hz_rad_ADCP[:,:,run_ind].T
     
     Fftheta_m2_Hz_rad_ADCP_particular = Fftheta_m2_Hz_rad_ADCP_particular[:,np.arange(0,len(theta_deg_ADCP)-1)]
@@ -117,8 +168,7 @@ for run_ind in np.arange(0,num_runs):
     
     inds_exclude = (F_ADCP["frequency"].data > f_cut_high) | (F_ADCP["frequency"].data < f_cut_low)
 
-    # ADCP directional spreading is shown to its lower frequency limit (high cut
-    # only); MWD/Tm01/peak below keep the standard band [f_cut_low, f_cut_high].
+    # spreading: ADCP high-cut only; MWD/Tm01 keep standard band [f_cut_low, f_cut_high]
     F_ADCP_spread = F_ADCP.copy(deep=True)
     F_ADCP_spread.data[F_ADCP_spread["frequency"].data > f_cut_high,:] = 0
 
@@ -127,21 +177,17 @@ for run_ind in np.arange(0,num_runs):
     inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
     F_EPSS.data[inds_exclude,:] = 0
 
-    # MWD compared only over the ADCP-trusted band [f_cut_low, f_ADCP_trust_high];
-    # spreading/Tm01 keep their own bands
+    # MWD over ADCP-trusted band [f_cut_low, f_ADCP_trust_high]; direction deg CW-from-N
     F_EPSS_mwd = F_EPSS.copy(deep=True)
     F_EPSS_mwd.data[F_EPSS_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
     mwd_EPSS, _ = compute_mean_wave_direction_and_spreading(F_EPSS_mwd,theta_halfwidth,smoothnum)
-    # F_f_d direction is already degrees CW-from-N (matches the ADCP MWD);
-    # no math-angle -> compass conversion
     MWD_EPSS[run_ind] = mwd_EPSS
 
-    # sigma_theta(f) is trusted to higher f than MWD/Tm01: recompute on the
-    # extended band [f_cut_low, f_cut_high_EPSS]
+    # sigma_theta(f) on extended band [f_cut_low, f_cut_high_EPSS]
     F_EPSS_spread = ds_EPSS_spect['F_f_d'][:,:,run_ind].copy(deep=True)
     inds_exclude_spread = (F_EPSS_spread["frequency"].data > f_cut_high_EPSS) | (F_EPSS_spread["frequency"].data < f_cut_low)
     F_EPSS_spread.data[inds_exclude_spread,:] = 0
-    _, spread_EPSS = compute_mean_wave_direction_and_spreading(F_EPSS_spread,theta_halfwidth,smoothnum)
+    spread_EPSS = lobe_sigma(F_EPSS_spread)          # single-lobe (estimator-fair vs ADCP)
     SPREAD_EPSS[run_ind,:] = spread_EPSS
     
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
@@ -150,11 +196,11 @@ for run_ind in np.arange(0,num_runs):
         F_ADCP_mwd = F_ADCP.copy(deep=True)
         F_ADCP_mwd.data[F_ADCP_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
         mwd_ADCP, _ = compute_mean_wave_direction_and_spreading(F_ADCP_mwd,theta_halfwidth,smoothnum)
-        _, spread_ADCP = compute_mean_wave_direction_and_spreading(F_ADCP_spread,theta_halfwidth,smoothnum)
+        spread_ADCP = lobe_sigma(F_ADCP_spread)      # single-lobe (estimator-fair vs E-PSS)
 
         Ff_ADCP = F_ADCP.integrate('direction').data
-        f_E_ADCP = np.sum(Ff_ADCP)/np.sum(f_Hz_ADCP**-1*Ff_ADCP)
-        f_diff = np.abs(f_E_ADCP-f_Hz_ADCP)
+        f_m02_ADCP = f_m02_of(f_Hz_ADCP, Ff_ADCP)
+        f_diff = np.abs(f_m02_ADCP-f_Hz_ADCP)
         ind = np.argmin(f_diff)
         
         ind_peak_ADCP[run_ind] = ind
@@ -166,7 +212,7 @@ for run_ind in np.arange(0,num_runs):
         MWD_ADCP[run_ind] = np.nan
         SPREAD_ADCP[run_ind,:] = np.nan
         
-    f_diff = np.abs(f_E[run_ind]-f_Hz)
+    f_diff = np.abs(f_m02[run_ind]-f_Hz)
     f_diff[0] = 1e3
     ind = np.argmin(f_diff)
     ind_peak_EPSS[run_ind] = ind
@@ -204,6 +250,10 @@ MWD_rmse = np.sqrt(np.nanmean(MWD_diff**2))
 # %%
 
 U10_bin_centers, U10_bin_edges, dU = wind_speed_bins()
+# x-axis spans the wind-speed bins (XMAX = Umax + dU/2 = top bin edge)
+U10_xlim = (U10_bin_centers[0] - dU/2, U10_bin_centers[-1] + dU/2)
+# ticks at every bin edge, out to and including xmax (so the last tick is labeled)
+U10_xticks = np.arange(U10_xlim[0], U10_xlim[1] + dU/2, dU)
 
 inds = ~np.isnan(MWD_diff)
 
@@ -211,15 +261,17 @@ bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s[inds],MWD_diff[
 bin_std, _, _ = stats.binned_statistic(U10_m_s[inds],MWD_diff[inds], statistic='std', bins=U10_bin_edges)
 bin_counts, _, _ = stats.binned_statistic(U10_m_s[inds], MWD_diff[inds], statistic='count', bins=U10_bin_edges)
 
-bin_95CI = 1.96*bin_std/bin_counts
+# 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
+bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
 bin_upper = bin_means + bin_95CI
 bin_lower = bin_means - bin_95CI
 
 fig = plt.figure(figsize=(fullwidth/2,fullwidth/2))
 plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
-plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=1,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
+plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=2,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
 plt.plot([0,16],[0,0],'--',color='gray')
-plt.xlim(0,14)
+plt.xlim(*U10_xlim)
+plt.xticks(U10_xticks)
 plt.xticks(np.arange(0,16,2))
 plt.yticks(np.arange(-360,360,15))
 plt.ylim(-45,45)
@@ -242,7 +294,7 @@ SPREAD_peak = np.nan*np.ones((num_runs,2))
 SPREAD_peak[:,0] = SPREAD_ADCP_peak
 SPREAD_peak[:,1] = SPREAD_EPSS_peak
 
-# Bias, MAE, and RMSE for directional spreading at f_E (E-PSS minus ADCP)
+# Bias, MAE, and RMSE for directional spreading at f_m02 (E-PSS minus ADCP)
 SPREAD_diff = SPREAD_EPSS_peak - SPREAD_ADCP_peak
 SPREAD_bias = np.nanmean(SPREAD_diff)
 SPREAD_mae = np.nanmean(np.abs(SPREAD_diff))
@@ -265,8 +317,7 @@ spread_ADCP = SPREAD_ADCP[run_ind,:]
 spread_EPSS = SPREAD_EPSS[run_ind,:]
 
 def plot_split(ax, x, y, lo, hi, label):
-    # Draw y(x) solid within the trusted band [lo, hi] (hi=None for no upper bound)
-    # and faded outside it; each faded segment overlaps the solid region by a point.
+    # solid within [lo, hi], faded outside (hi=None = no upper bound)
     x = np.asarray(x)
     solid = np.ones(len(x), bool)
     if lo is not None: solid &= x >= lo
@@ -275,8 +326,14 @@ def plot_split(ax, x, y, lo, hi, label):
     if solid.any():
         i0, i1 = np.where(solid)[0][[0, -1]]
         faded = []
-        if i0 > 0: m = np.zeros(len(x), bool); m[:i0+1] = True; faded.append(m)
-        if i1 < len(x)-1: m = np.zeros(len(x), bool); m[i1:] = True; faded.append(m)
+        if i0 > 0:
+            m = np.zeros(len(x), bool)
+            m[:i0+1] = True
+            faded.append(m)
+        if i1 < len(x)-1:
+            m = np.zeros(len(x), bool)
+            m[i1:] = True
+            faded.append(m)
         for fm in faded:
             ax.plot(x, np.where(fm, y, np.nan), color=line.get_color(), linewidth=2, alpha=alpha_faded)
 
@@ -290,7 +347,7 @@ axs[0].set_ylim(0,90)
 axs[0].set_xlim(1e-2,1e0)
 axs[0].set_xlabel('f [Hz]')
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$\circ$]')
-axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.75,82.5,r'$f_E$',color=color_list[2])
+axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.9,82.5,r'$f_{m02}$',color=color_list[2],ha='right')
 
 axs[0].grid(which='major', linestyle='-', linewidth=0.75)
 axs[0].grid(which='minor', linestyle=':', linewidth=0.75)
@@ -304,7 +361,8 @@ for n in np.arange(2):
     bin_std, _, _ = stats.binned_statistic(U10_m_s[inds],values[inds], statistic='std', bins=U10_bin_edges)
     bin_counts, _, _ = stats.binned_statistic(U10_m_s[inds], values[inds], statistic='count', bins=U10_bin_edges)
 
-    bin_95CI = 1.96*bin_std/bin_counts
+    # 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
+    bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
     bin_upper = bin_means + bin_95CI
     bin_lower = bin_means - bin_95CI
 
@@ -314,10 +372,11 @@ for n in np.arange(2):
 
 axs[1].set_yticks(np.arange(0,360,15))
 axs[1].set_ylim(0,90)
-axs[1].set_xlim(0,14)
+axs[1].set_xlim(*U10_xlim)
+axs[1].set_xticks(U10_xticks)
 axs[1].set_xticks(np.arange(0,16,2))
 axs[1].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
-axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_E$ [$\circ$]')
+axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_{m02}$ [$\circ$]')
 axs[1].legend()
 
 for n in np.arange(2):

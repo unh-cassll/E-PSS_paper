@@ -1,14 +1,11 @@
 """
-Multi-aperture sampling of the g2s short-wave elevation field and the resulting
-stitched omnidirectional saturation spectrum. Left 2x2 quad: the same g2s
-eta(x,y) field viewed through four aperture window sizes (A0 broadest -> A7
-tightest), each seeded with its virtual wave-gauge staffs; right panel: the
-per-aperture k^3 F(k) estimates (solid where trusted, dotted beyond), the stitched
-EWDM composite, and the direct full-frame k^3 F(k) reference.
+Multi-aperture g2s elevation field and stitched omnidirectional saturation spectrum.
+Left 2x2 quad: eta(x,y) through four aperture sizes (A0 broadest -> A7 tightest)
+with virtual staff seeds; right panel: per-aperture k^3 F(k), stitched EWDM
+composite, and direct full-frame k^3 F(k) reference.
 
-The multi-aperture compute (~100 s over the ensemble) is cached to
-aperture_field_stitch.nc; delete it or set recompute=True to regenerate. The
-estimator config matches the validated generator (compute_all_directional_spectra).
+Results cached to aperture_field_stitch.nc (~100 s to recompute); set recompute=True
+to regenerate. Estimator config matches compute_all_directional_spectra.
 """
 
 import os
@@ -20,8 +17,10 @@ from matplotlib.patches import Circle
 
 from subroutines.utils import (figure_style, DX_M, WATER_DEPTH_M, FS_HZ,
                                NUM_SAMPLES, epss_ewdm_grids)
-from multiaperture import (build_eta_field, recolored_long_wave, default_apertures,
-                           multiaperture_spectra, seed_aperture, sftheta_sign_anchor)
+# slope->elevation front end + sign anchor from this repo; multi-aperture estimator from ewdm.
+from multiaperture import build_eta_field, fourier_slope_projection, sftheta_sign_anchor
+from ewdm import MultiApertureArrays
+from ewdm.multiaperture import default_apertures, seed_aperture
 color_list, fullwidth, fullheight, fsize = figure_style()
 
 import warnings
@@ -33,7 +32,7 @@ dx = DX_M
 runs = [60, 95, 130, 165]              # ensemble for the per-aperture + stitched spectra
 snap_run = 130                         # field-snapshot run (Hm0 ~ 1 m)
 i_snap = 4600                          # snapshot frame
-krog_disc = 32                         # full-frame disc long-wave average (matches generator)
+slope_aperture = 32                    # full-frame disc
 depiston_n = 2.0                       # gated de-piston cut (matches generator)
 
 freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
@@ -43,44 +42,57 @@ CACHE = path + 'aperture_field_stitch.nc'
 recompute = False
 if recompute or not os.path.exists(CACHE):
     fld = nc.Dataset(path+'ASIT2019_slope_fields_reduced.nc')
-    ref = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+    # sign-anchor ref indexed to slope_fields_reduced run numbering; override via EPSS_REF
+    ref = nc.Dataset(os.environ.get(
+        'EPSS_REF', path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'))
     ap = default_apertures()
     # ensemble per-aperture + stitched spectra (validated de-piston + sign-anchor config)
     ap_sum = [np.zeros(len(k_grid)) for _ in ap]
-    Fk_sum = np.zeros(len(k_grid)); n = 0
+    Fk_sum = np.zeros(len(k_grid))
+    n = 0
     for r in runs:
         se = np.nan_to_num(np.ma.filled(fld['slope_east'][r][..., :num_samples], np.nan)).astype(float)
         sn = np.nan_to_num(np.ma.filled(fld['slope_north'][r][..., :num_samples], np.nan)).astype(float)
-        eta, _, eta_solve = build_eta_field(se, sn, depth, fs, krog_disc=krog_disc, depiston_n=depiston_n)
-        M = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
-                                  apertures=ap, n_staff=16, solve_eta=eta_solve,
-                                  sign_anchor=sftheta_sign_anchor(ref, r))
-        for a, (ok, ink) in enumerate(M['ap_ok_omni']):
-            ap_sum[a] += np.nan_to_num(ok)
-        Fk_sum += np.nan_to_num(M['Fk']); n += 1
-    ap_mean = np.array([s/n for s in ap_sum]); Fk = Fk_sum/n
-    # g2s short-wave field snapshot for snap_run (independent of the spectrum ensemble)
+        eta, _, eta_solve = build_eta_field(se, sn, depth, fs, slope_aperture=slope_aperture, depiston_n=depiston_n)
+        M = MultiApertureArrays.from_field(eta, dx, depth, fs).compute(
+            freqs=freqs, k_grid=k_grid, nu_grid=nu_grid, apertures=ap, n_staff=16,
+            seed=20, solve_eta=eta_solve, reliability_gate=None,
+            sign_anchor=sftheta_sign_anchor(ref, r), return_apertures=True)
+        ap_fk = np.asarray(M['aperture_Fk'].values, float)        # (aperture, k) per-aperture omni F(k)
+        for a in range(len(ap)):
+            ap_sum[a] += np.nan_to_num(ap_fk[a])
+        Fk_sum += np.nan_to_num(np.asarray(M['wavenumber_spectrum'].values, float))
+        n += 1
+    ap_mean = np.array([s/n for s in ap_sum])
+    Fk = Fk_sum/n
+    # g2s short-wave field snapshot for snap_run
     se = np.nan_to_num(np.ma.filled(fld['slope_east'][snap_run][..., :num_samples], np.nan)).astype(float)
     sn = np.nan_to_num(np.ma.filled(fld['slope_north'][snap_run][..., :num_samples], np.nan)).astype(float)
-    eta, _ = build_eta_field(se, sn, depth, fs, krog_disc=krog_disc)
-    # subtract the same recolored long wave build_eta_field added, so the g2s
-    # short-wave field is zero-mean per frame
-    el = recolored_long_wave(se, sn, depth, fs, krog_disc=krog_disc)
+    eta, _ = build_eta_field(se, sn, depth, fs, slope_aperture=slope_aperture)
+    # subtract the long wave to isolate the g2s short-wave field
+    el = fourier_slope_projection(se, sn, depth, fs)
     Zsnap = (eta - el[None, None, :])[:, :, i_snap]      # g2s short-wave field (zero spatial mean)
     xr.Dataset(
         {'ap_mean': (('aperture', 'k'), ap_mean),
          'Fk': (('k',), Fk),
-         'ap_bands': (('aperture', 'edge'), np.array(M['ap_bands'])),
+         'ap_bands': (('aperture', 'edge'),
+                      np.stack([np.asarray(M['aperture_klo'].values, float),
+                                np.asarray(M['aperture_khi'].values, float)], axis=1)),
          'ap_ext': (('aperture',), np.array([e for _, e in ap])),
          'Zsnap': (('y', 'x'), Zsnap)},
-        coords={'k': k_grid, 'aperture': list(M['ap_names'])},
+        coords={'k': k_grid, 'aperture': [str(a) for a in M['aperture_name'].values]},
         attrs={'dx': dx, 'snap_run': snap_run},
     ).to_netcdf(CACHE)
 
 dc = xr.open_dataset(CACHE)
-k_grid = dc['k'].values; ap_mean = dc['ap_mean'].values; Fk = dc['Fk'].values
-ap_names = [str(a) for a in dc['aperture'].values]; ap_bands = dc['ap_bands'].values
-ap_ext = dc['ap_ext'].values; Zsnap = dc['Zsnap'].values; dx = float(dc.attrs['dx'])
+k_grid = dc['k'].values
+ap_mean = dc['ap_mean'].values
+Fk = dc['Fk'].values
+ap_names = [str(a) for a in dc['aperture'].values]
+ap_bands = dc['ap_bands'].values
+ap_ext = dc['ap_ext'].values
+Zsnap = dc['Zsnap'].values
+dx = float(dc.attrs['dx'])
 
 # direct full-frame wavenumber saturation k^3 F(k) = k * S_k(k) over the same runs
 ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
@@ -91,8 +103,7 @@ S_k_theta[:, :, -1] = np.nan                                  # drop crashing to
 S_k_slope = np.nansum(k_sl[None, None, :]*S_k_theta, axis=1)*dth
 Bk_direct = np.nanmean(k_sl[None, :]*S_k_slope, axis=0)
 
-# palette for the four shown apertures (violet, teal, goldenrod, blue); crimson is
-# reserved for the stitched EWDM and black for the direct spectrum
+# aperture palette: violet, teal, goldenrod, blue; crimson = stitched EWDM; black = direct
 show = ['A0', 'A2', 'A4', 'A7']                  # broadest -> tightest
 show_idx = [ap_names.index(s) for s in show]
 show_cols = [color_list[0], color_list[1], color_list[3], color_list[4]]   # violet, teal, goldenrod, blue
@@ -121,13 +132,15 @@ quad_cells = [(0, 0), (0, 1), (1, 0), (1, 1)]
 tags = ['(a)', '(b)', '(c)', '(d)']
 fax = []
 for (r, c), idx, col, tag in zip(quad_cells, show_idx, show_cols, tags):
-    ax = fig.add_subplot(gs[r, c]); fax.append(ax)
+    ax = fig.add_subplot(gs[r, c])
+    fax.append(ax)
     im = ax.pcolormesh(xg, yg, Zsnap, cmap='coolwarm', vmin=-vZ, vmax=vZ, shading='auto', rasterized=True)
     ax.set_aspect('equal')
     w = ap_ext[idx]*dx                  # aperture diameter [m]
     ax.add_patch(Circle((0, 0), w/2, fill=False, edgecolor=col, lw=2.5))
     ii, jj = gauges[idx]
-    gx = (jj-(nx-1)/2.0)*dx; gy = (ii-(ny-1)/2.0)*dx
+    gx = (jj-(nx-1)/2.0)*dx
+    gy = (ii-(ny-1)/2.0)*dx
     inside = np.hypot(gx, gy) <= w/2.0
     ax.scatter(gx[inside], gy[inside], s=14, facecolor='white', edgecolor='black', linewidth=0.5, zorder=5)
     # aperture name inset by its ring, in the ring color
@@ -152,7 +165,8 @@ for idx, col in zip(show_idx, show_cols):
 m = np.isfinite(Fk) & (k_grid <= ap_bands[:, 1].max())
 ax.loglog(k_grid[m], (k3*Fk)[m], '-', color=color_list[2], lw=2.5, label='multi-aperture')
 ax.loglog(k_sl, Bk_direct, 'k--', lw=2.5, label=r'direct')
-ax.set_xlim(1e-1, 2e1); ax.set_ylim(1e-4, 2e-2)
+ax.set_xlim(5e-2, 5e1)
+ax.set_ylim(1e-4, 1e-1)
 ax.set_xlabel(r'k [rad m$^{-1}$]'); ax.set_ylabel(r'k$^3$F(k) [rad]')
 ax.yaxis.set_label_position('right')
 ax.yaxis.tick_right()
@@ -160,8 +174,7 @@ ax.grid(which='major', ls='-', lw=0.75); ax.grid(which='minor', ls=':', lw=0.75)
 ax.legend(fontsize=fsize, loc='lower right', ncol=1)
 panel_tag(ax, '(e)')
 
-# after the constrained-layout solve, match the spectrum panel's vertical extent
-# to the quad block, then freeze the layout so the override survives savefig
+# match spectrum panel height to quad block; freeze layout so the override survives savefig
 fig.draw_without_rendering()
 quad_top = max(a.get_position().y1 for a in fax)
 quad_bot = min(a.get_position().y0 for a in fax)

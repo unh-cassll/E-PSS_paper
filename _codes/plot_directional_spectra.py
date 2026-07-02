@@ -42,8 +42,7 @@ ds = nc.Dataset(fn)
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 
 ds_EPSS_spect = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
-# Dataset direction is radians; plot the angular axis in degrees (matches the EWDM
-# polar plotter and the per-degree ADCP spectrum below).
+# convert direction axis from radians to degrees
 ds_EPSS_spect = ds_EPSS_spect.assign_coords(direction=np.degrees(ds_EPSS_spect['direction']))
 
 f_Hz = ds['f_Hz'][:]
@@ -117,8 +116,7 @@ dataset_Pyxis_frequency = xr.Dataset(
 
 Ffd = dataset_Pyxis_frequency.Ffd
 
-# F_f_d is a per-radian density; convert to per-degree to share the colorbar with
-# the per-degree ADCP spectrum (label below stays deg^-1).
+# convert F_f_d from per-radian to per-degree density (matches ADCP colorbar)
 F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]*np.pi/180
 
 Ff_ADCP = dataset_ADCP.F_ADCP.integrate('direction')

@@ -51,7 +51,7 @@ f_Hz, Pxx_den_lab = omni_complete_spectrum(slope_east_lab[run_ind], slope_north_
 f_Hz, Pxx_den_emp = omni_complete_spectrum(slope_east_emp[run_ind], slope_north_emp[run_ind], water_depth_m, sampling_rate_PSS, highpass_peak_fraction=0.5, nfft=nperseg, nperseg=nperseg, aperture_diameter_m=L_FOV_M)
 
 # Display 0.05-5 Hz; fade each spectrum outside the validated passband [f_hp, f_lp]
-f_hp, f_lp = 0.08, 0.7
+f_hp, f_lp = 0.08, 0.5
 fmin_disp, fmax_disp = 0.05, 5.0
 alpha_faded = 0.30
 

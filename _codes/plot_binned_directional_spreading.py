@@ -33,7 +33,8 @@ def band_average(A, n=5):
     out = np.full(A.shape, np.nan)
     half = n//2
     for j in range(A.shape[1]):
-        lo = max(0, j-half); hi = min(A.shape[1], j+half+1)
+        lo = max(0, j-half)
+        hi = min(A.shape[1], j+half+1)
         out[:,j] = np.nanmean(A[:,lo:hi], axis=1)
     return out
 
@@ -42,27 +43,48 @@ def band_average(A, n=5):
 theta_halfwidth = 120
 smoothnum = 5
 
+# single-lobe sigma_theta window half-width [deg] for E-PSS (EWDM+direct) AND ADCP.
+# +-90 isolates the dominant lobe and excludes the direct spectrum's 180-deg mirror
+# lobe; wider windows admit more tail (and mirror-lobe tail for the direct).
+SIGMA_HALFWIDTH = 90.0
+
+
+def _smooth5(x, n=smoothnum):
+    # centered n-point rolling median over the scale axis (NaN-aware, edge-shrinking),
+    # matching the smoothing the previous full-distribution estimator applied.
+    x = np.asarray(x, float)
+    m = len(x)
+    out = x.copy()
+    for i in range(m):
+        w = x[max(0, i-n//2):min(m, i+n//2+1)]
+        w = w[np.isfinite(w)]
+        if w.size:
+            out[i] = np.median(w)
+    return out
+
 
 def lobe_spread(directions_deg, density, halfwidth=90.0):
-    # Per-scale downwave-lobe direction and spread for 180-deg-symmetric direct-slope
-    # spectra: center on the resultant direction, keep energy within +-halfwidth,
-    # take that lobe's centroid and rms angular width (excludes the upwind lobe; the
-    # +-90 window bounds sigma_theta <= 90). Returns direction (deg CW from N),
-    # spread (deg), resultant length.
+    # Per-scale downwave-lobe centroid direction [deg CW from N], rms spread [deg],
+    # and resultant length. Keeps energy within +-halfwidth of the resultant direction.
     th = np.radians(np.asarray(directions_deg))
     cos_t, sin_t = np.cos(th), np.sin(th)
     hw = np.radians(halfwidth)
     E = np.nan_to_num(density)
     nsc = E.shape[0]
-    th0 = np.full(nsc, np.nan); sig = np.full(nsc, np.nan); m1 = np.full(nsc, np.nan)
+    th0 = np.full(nsc, np.nan)
+    sig = np.full(nsc, np.nan)
+    m1 = np.full(nsc, np.nan)
     for j in range(nsc):
-        D = E[j]; s = D.sum()
+        D = E[j]
+        s = D.sum()
         if s <= 0:
             continue
-        a = (D*cos_t).sum(); b = (D*sin_t).sum()
+        a = (D*cos_t).sum()
+        b = (D*sin_t).sum()
         m1[j] = np.hypot(a, b)/s
         d = np.angle(np.exp(1j*(th - np.arctan2(b, a))))     # angle from dominant lobe
-        Dk = D*(np.abs(d) <= hw); sk = Dk.sum()
+        Dk = D*(np.abs(d) <= hw)
+        sk = Dk.sum()
         if sk <= 0:
             continue
         thc = np.arctan2((Dk*sin_t).sum(), (Dk*cos_t).sum())  # kept-lobe centroid
@@ -73,9 +95,8 @@ def lobe_spread(directions_deg, density, halfwidth=90.0):
 
 
 def spreading(scale_values, directions, density):
-    # sigma_theta vs scale from a directional spectrum density(scale, direction).
-    # Scale axis labeled 'frequency' so the shared estimator applies to f and k;
-    # per-scale spread is independent of that label.
+    # sigma_theta [deg] vs scale from directional spectrum density(scale, direction).
+    # Scale axis labeled 'frequency' for xr.Dataset compatibility; applies to f and k.
     if not np.isfinite(density).any() or np.nansum(np.abs(density)) <= 0:
         return np.full(len(scale_values), np.nan)
     F = xr.Dataset(
@@ -91,15 +112,14 @@ def spreading(scale_values, directions, density):
 
 # E-PSS directional spectra (elevation) in frequency and wavenumber
 ds_EPSS = xr.open_dataset(path+'ASIT2019_EPSS_directional_spectra.nc')
-# Dataset direction is radians; the spreading estimator wraps in degrees (shape only,
-# unaffected by the per-radian density level), so view the axis in degrees.
+# Convert direction axis from radians to degrees (density level unchanged)
 ds_EPSS = ds_EPSS.assign_coords(direction=np.degrees(ds_EPSS['direction']))
 f_EPSS = ds_EPSS['frequency'].data
 k_EPSS = ds_EPSS['wavenumber'].data
 dir_EPSS = ds_EPSS['direction'].data
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
-U10_m_s = ds_other['COARE_U10'][:]
+U10_m_s = ds_other['U10_best'][:]
 
 # Direct full-frame slope directional spectra (slope^2 density; runs, dir, scale)
 ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
@@ -128,35 +148,33 @@ SPREAD_DIRECT_k = np.nan*np.ones((num_runs,len(k_direct)))
 
 
 def direct_dir(dirs, dens):
-    # direct-spectrum downwave-lobe directional spread (sigma_theta) per scale.
-    # +-90 deg isolates one lobe of the 180-deg-bipolar slope spectrum (a wider
-    # window lets the opposite lobe's tails inflate sigma_theta); the EWDM uses
-    # +-120 because its elevation spectrum is sign-resolved (single-lobe).
-    _, sp, _ = lobe_spread(dirs, dens, halfwidth=90.0)
-    return sp
+    # Single-lobe downwave sigma_theta [deg] per scale; +-90 deg isolates one lobe.
+    # Same estimator for EWDM and direct halves (direct is 180-deg-bipolar; mirror lobe excluded).
+    _, sp, _ = lobe_spread(dirs, dens, halfwidth=SIGMA_HALFWIDTH)
+    return _smooth5(sp)
 
 
 for run_ind in np.arange(0,num_runs):
 
-    SPREAD_EPSS_f[run_ind,:] = spreading(f_EPSS, dir_EPSS, ds_EPSS['F_f_d'][:,:,run_ind].data)
-    SPREAD_EPSS_k[run_ind,:] = spreading(k_EPSS, dir_EPSS, ds_EPSS['F_k_d'][:,:,run_ind].data)
+    # EWDM half: same single-lobe estimator as the direct half (see direct_dir)
+    SPREAD_EPSS_f[run_ind,:] = direct_dir(dir_EPSS, np.nan_to_num(ds_EPSS['F_f_d'][:,:,run_ind].data))
+    SPREAD_EPSS_k[run_ind,:] = direct_dir(dir_EPSS, np.nan_to_num(ds_EPSS['F_k_d'][:,:,run_ind].data))
 
     # direct full-frame slope spectra (transpose to scale-by-direction)
     SPREAD_DIRECT_f[run_ind,:] = direct_dir(dir_direct, np.nan_to_num(ds_emp['S_f_theta'][run_ind].T))
     SPREAD_DIRECT_k[run_ind,:] = direct_dir(dir_direct, np.nan_to_num(ds_emp['S_k_theta'][run_ind].T))
 
-    # ADCP: triple-wrap the directions, slice to [-180, 180], spread vs f
+    # ADCP: triple-wrap directions, slice to [-180, 180], spread vs f (single-lobe estimator).
     Ff = Fftheta_ADCP[:,:,run_ind].T                          # (f, theta)
     Ff = Ff[:,np.arange(0,len(theta_deg_ADCP)-1)]
     bigFf = np.concatenate((Ff,Ff,Ff),axis=1)
     Ff = bigFf[:,inds_keep]
-    SPREAD_ADCP_f[run_ind,:] = spreading(f_Hz_ADCP, theta_deg_ADCP, Ff*np.pi/180)
+    SPREAD_ADCP_f[run_ind,:] = direct_dir(theta_deg_ADCP, np.nan_to_num(Ff*np.pi/180))
 
-# Bin by U10 (nanmean so a single NaN run does not drop a wind bin)
 U_centers, U_boundaries, dU = wind_speed_bins()
 
 def wind_bin(A):
-    # mean over runs in each U10 bin (nanmean so one NaN run does not drop a bin)
+    # nanmean of A over runs in each U10 bin
     out = np.nan*np.ones((len(U_centers), A.shape[1]))
     for i in np.arange(len(U_centers)):
         inds = (U10_m_s > U_centers[i] - dU/2) & (U10_m_s <= U_centers[i] + dU/2)
@@ -200,9 +218,7 @@ k_lims = [1e-2,2e2]
 lw_thick = 2.5
 lw_thin = 1.5
 
-# E-PSS reliability boundaries (per axis): EWDM trusted at/below the boundary,
-# direct slope spectra at/above; each faded beyond. f_bound is the deep-water
-# dispersion partner of k_bound.
+# E-PSS reliability boundaries: EWDM trusted at/below, direct slope at/above; each faded beyond.
 f_bound = 1.0
 k_bound = 4.0
 alpha_faded = 0.30
@@ -212,9 +228,8 @@ k_low, f_low = ewdm_low_cutoff()
 
 
 def trusted_segments(x, bound, is_ewdm, low_bound=None):
-    # solid (trusted) mask and faded (beyond) masks, each overlapping the solid
-    # region by one point. EWDM trusted within [low_bound, bound]; direct slope
-    # at/above bound.
+    # Solid (trusted) and faded (beyond) masks, overlapping by one point.
+    # EWDM: trusted in [low_bound, bound]; direct slope: trusted at/above bound.
     x = np.asarray(x)
     if is_ewdm:
         solid = (x >= (low_bound if low_bound is not None else -np.inf)) & (x <= bound)
@@ -224,18 +239,21 @@ def trusted_segments(x, bound, is_ewdm, low_bound=None):
     if solid.any():
         i0, i1 = np.where(solid)[0][[0, -1]]
         if i0 > 0:
-            m = np.zeros(len(x), bool); m[:i0+1] = True; faded.append(m)
+            m = np.zeros(len(x), bool)
+            m[:i0+1] = True
+            faded.append(m)
         if i1 < len(x)-1:
-            m = np.zeros(len(x), bool); m[i1:] = True; faded.append(m)
+            m = np.zeros(len(x), bool)
+            m[i1:] = True
+            faded.append(m)
     return solid, faded
 
 
-# ADCP dashed estimate: solid within [f_low, f_ADCP_trust_high], faded beyond. The
-# mask indexes f_Hz_ADCP; it applies to the k-mapped axis by position.
+# ADCP mask: solid in [f_low, f_ADCP_trust_high], faded beyond; applies to k-axis by position.
 adcp_solid, adcp_faded = trusted_segments(f_Hz_ADCP, f_ADCP_trust_high, True, f_low)
 
 
-# Per-column axis spec: (EWDM x, direct x, ADCP x, boundary, EWDM low bound, x-limits, x-label)
+# Per-column spec: (EWDM x, direct x, ADCP x, boundary, EWDM low bound, x-limits, x-label)
 columns = [
     (f_EPSS,  f_direct,  f_Hz_ADCP, f_bound,  f_low,  f_lims,  'f [Hz]'),
     (k_EPSS,  k_direct,  k_ADCP,    k_bound,  k_low,  k_lims,  r'k [rad m$^{-1}$]'),
@@ -246,7 +264,7 @@ spread_DIRECT = [SPREAD_DIRECT_f_binned, SPREAD_DIRECT_k_binned]
 
 
 def draw_technique(ax, x, Y, bound, is_ewdm, low_bound=None):
-    # black-outlined solid on the trusted side of the boundary, faded beyond
+    # Black-outlined solid on the trusted side of the boundary, faded beyond.
     x = np.asarray(x)
     solid, faded = trusted_segments(x, bound, is_ewdm, low_bound)
     for i in np.arange(len(U_centers)):
@@ -258,13 +276,13 @@ def draw_technique(ax, x, Y, bound, is_ewdm, low_bound=None):
 
 
 def draw_panel(ax, x_EWDM, Y_EWDM, x_DIRECT, Y_DIRECT, x_ADCP, Y_ADCP, bound, low_bound):
-    x_ADCP = np.asarray(x_ADCP)                               # ADCP dashed: solid in band, faded beyond
+    x_ADCP = np.asarray(x_ADCP)                               # ADCP dashed: solid in trust band, faded beyond
     for i in np.arange(len(U_centers)):
         ax.semilogx(x_ADCP[adcp_solid], Y_ADCP[i,adcp_solid], '--', color=colors[i], linewidth=lw_thin)
         for fm in adcp_faded:
             ax.semilogx(x_ADCP[fm], Y_ADCP[i,fm], '--', color=colors[i], linewidth=lw_thin, alpha=alpha_faded)
-    draw_technique(ax, x_EWDM, Y_EWDM, bound, True, low_bound)  # EWDM, trusted in [low, bound]
-    draw_technique(ax, x_DIRECT, Y_DIRECT, bound, False)        # direct slope, trusted above
+    draw_technique(ax, x_EWDM, Y_EWDM, bound, True, low_bound)  # EWDM: trusted in [low, bound]
+    draw_technique(ax, x_DIRECT, Y_DIRECT, bound, False)        # direct slope: trusted above bound
     ax.axvline(bound, color='dimgray', linestyle='--', linewidth=1, alpha=0.7)
     ax.axvline(low_bound, color='dimgray', linestyle='--', linewidth=1, alpha=0.7)
     ax.grid(which='major', linestyle='-', linewidth=0.75)
@@ -275,16 +293,17 @@ fig, axs = plt.subplots(1, 2, figsize=(fullwidth, fullwidth*0.5))
 
 for n, (x_EWDM, x_DIRECT, x_ADCP, bound, low_bound, xlims, xlabel) in enumerate(columns):
 
-    # directional spreading sigma_theta
     draw_panel(axs[n], x_EWDM, spread_EWDM[n], x_DIRECT, spread_DIRECT[n], x_ADCP, SPREAD_ADCP_f_binned, bound, low_bound)
-    axs[n].set_xlim(xlims); axs[n].set_ylim(0,90); axs[n].set_yticks(np.arange(0,91,15))
+    axs[n].set_xlim(xlims)
+    axs[n].set_ylim(0,90)
+    axs[n].set_yticks(np.arange(0,91,15))
     axs[n].set_xlabel(xlabel)
     axs[n].text(0.05,0.92,panel_labels[n],fontsize=fsize,ha='center',va='center',transform=axs[n].transAxes)
 
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$^\circ$]')
 axs[1].set_yticklabels([])
 
-# E-PSS (solid: EWDM below boundary, direct slope above) vs ADCP (dashed) legend
+# Legend: E-PSS (EWDM below boundary / direct slope above) vs ADCP (dashed)
 axs[0].plot([],[],'-',color='black',linewidth=lw_thin,label='E-PSS (EWDM / direct)')
 axs[0].plot([],[],'--',color='black',linewidth=lw_thin,label='ADCP')
 axs[0].legend(loc='lower left',fontsize=fsize)

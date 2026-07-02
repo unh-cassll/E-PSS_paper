@@ -1,9 +1,7 @@
 """
-Demonstrate the two E-PSS elevation-reconstruction pathways from a polarimetric
-slope-field stack: the long-wave path (direction-aware Krogstad wavelet on the
-centered disc-averaged slope timeseries) and the short-wave path (per-frame g2s
-numerical surface integration; Harker & O'Leary). Stacked layout: slope timeseries
--> long-wave eta(t) -> g2s short-wave eta(x,y) snapshot.
+E-PSS elevation-reconstruction demo: long-wave path (Fourier slope projection on
+disc-averaged slope timeseries) and short-wave path (per-frame g2s surface integration).
+Stacked layout: slope timeseries -> long-wave eta(t) -> g2s short-wave eta(x,y) snapshot.
 """
 
 import numpy as np
@@ -12,7 +10,7 @@ from scipy import signal
 from matplotlib import pyplot as plt
 
 from subroutines.utils import figure_style, WATER_DEPTH_M, FS_HZ
-from multiaperture import build_eta_field, recolored_long_wave
+from multiaperture import build_eta_field, fourier_slope_projection
 color_list, fullwidth, fullheight, fsize = figure_style()
 
 import warnings
@@ -22,7 +20,7 @@ path = '../_data/'
 fs = FS_HZ
 depth = WATER_DEPTH_M
 run_ind = 180         # ~1 m Hs run; inferred long wave is in phase with the lidar here
-krog_disc = 32         # full-frame disc (matches the archive / aperture figure)
+slope_aperture = 32    # full-frame disc
 
 # Slope-field stack for one run (earth-referenced; ny, nx, T)
 fld = nc.Dataset(path+'ASIT2019_slope_fields_reduced.nc')
@@ -30,19 +28,17 @@ SxF = np.nan_to_num(np.ma.filled(fld['slope_east'][run_ind], np.nan)).astype(flo
 SyF = np.nan_to_num(np.ma.filled(fld['slope_north'][run_ind], np.nan)).astype(float)
 ny, nx, T = SxF.shape
 
-# Combined camera elevation field, split into its two display components:
-# eta_long (spatially uniform Krogstad wavelet long wave) and Z (g2s short wave)
-eta, dx = build_eta_field(SxF, SyF, depth, fs, krog_disc=krog_disc)
+# Split elevation into long-wave (Fourier slope projection) and short-wave (g2s) components
+eta, dx = build_eta_field(SxF, SyF, depth, fs, slope_aperture=slope_aperture)
 yy, xx = np.ogrid[:ny, :nx]
-disc = (yy-(ny-1)/2.0)**2 + (xx-(nx-1)/2.0)**2 <= (krog_disc/2.0)**2
+disc = (yy-(ny-1)/2.0)**2 + (xx-(nx-1)/2.0)**2 <= (slope_aperture/2.0)**2
 sE_disc = SxF[disc].mean(0)            # disc-averaged slope timeseries (long-wave input)
 sN_disc = SyF[disc].mean(0)
-# same recolored long wave build_eta_field added, so Z is the pure short wave
-eta_long = recolored_long_wave(SxF, SyF, depth, fs, krog_disc=krog_disc)
+# subtract the long wave; Z is the pure g2s short-wave field
+eta_long = fourier_slope_projection(SxF, SyF, depth, fs)
 Z = eta - eta_long[None, None, :]      # g2s short-wave elevation field
 
-# Riegl lidar reference, low-passed to the long wave and shifted into phase
-# (cross-correlation) for overlay on the inferred long-wave elevation
+# Riegl lidar: low-passed and phase-aligned to the inferred long-wave elevation
 ds_o = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
 lidar = np.ma.filled(ds_o['wse_m_Riegl'][0, :, run_ind], np.nan)
 _b, _a = signal.butter(4, 0.4/(fs/2), 'low')
@@ -54,10 +50,11 @@ _sel = np.abs(_lags) <= int(5*fs)
 lag = int(_lags[_sel][np.argmax(_xc[_sel])])
 lidar_shift = np.roll(lidar_lp, lag)   # lidar aligned to the inferred long wave
 
-# Displayed 10-s window; snapshot frame at its midpoint (t = 5 s)
+# 10-s display window; snapshot at midpoint (t = 5 s)
 t = np.arange(T)/fs
 t_start = 310.0       # window where the inferred long wave best matches the lidar
-i0 = int(t_start*fs); i1 = i0 + int(10*fs)
+i0 = int(t_start*fs)
+i1 = i0 + int(10*fs)
 i_snap = i0 + int(5*fs)
 tw = t[i0:i1] - t_start
 t_snap = tw[i_snap-i0]
@@ -82,23 +79,30 @@ def panel_tag(ax, tag):
 # slope timeseries (long-wave input)
 ax0.plot(tw, sE_d[i0:i1], '--', color='black', lw=2, label=r'$s_E$')
 ax0.plot(tw, sN_d[i0:i1], ':', color='black', lw=2, label=r'$s_N$')
-ax0.set_ylabel('slope [rad]'); ax0.set_ylim(-slope_lim, slope_lim)
-ax0.set_xlim(0, 10); ax0.legend(loc='upper right', fontsize=fsize)
-ax0.axvline(t_snap, color=color_list[2], lw=1, alpha=0.6); ax0.set_xticklabels([])
+ax0.set_ylabel('slope [rad]')
+ax0.set_ylim(-slope_lim, slope_lim)
+ax0.set_xlim(0, 10)
+ax0.legend(loc='upper right', fontsize=fsize)
+ax0.axvline(t_snap, color=color_list[3], lw=1.5, alpha=0.6)
+ax0.set_xticklabels([])
 panel_tag(ax0, '(a)')
 
-# long-wave elevation (Krogstad wavelet) with the phase-aligned lidar overlay
-ax1.plot(tw, eta_long[i0:i1], color=color_list[2], lw=2, label='E-PSS inferred')
-ax1.plot(tw, lidar_shift[i0:i1], 'k--', lw=2, label=r'lidar (%+.1f s)' % (lag/fs))
-ax1.set_ylabel(r'long wave $\eta$ [m]'); ax1.set_xlim(0, 10)
-ax1.set_ylim(-0.8, 0.8); ax1.set_xlabel('t [s]')
-ax1.axvline(t_snap, color=color_list[2], lw=1, alpha=0.6)
-ax1.legend(loc='upper right', fontsize=fsize)
+# long-wave elevation (Fourier slope projection) with the phase-aligned lidar overlay
+ax1.plot(tw, eta_long[i0:i1], color=color_list[2], lw=2, label='E-PSS')
+ax1.plot(tw, lidar_shift[i0:i1], 'k--', lw=2, label=r'lidar') #label=r'lidar (%+.1f s)' % (lag/fs))
+ax1.set_ylabel(r'long wave $\eta$ [m]')
+ax1.set_xlim(0, 10)
+ax1.set_ylim(-1.2, 1.2)
+ax1.set_xlabel('t [s]')
+ax1.axvline(t_snap, color=color_list[3], lw=1.5, alpha=0.6)
+ax1.legend(loc='lower right', fontsize=fsize)
 panel_tag(ax1, '(b)')
 
 # g2s short-wave elevation field at t = 5 s (full width, colorbar atop)
 im = ax2.pcolormesh(xg, yg, Zsnap, cmap='coolwarm', vmin=-vZ, vmax=vZ, shading='auto', rasterized=True)
-ax2.set_aspect('equal'); ax2.set_xlabel('x [m]'); ax2.set_ylabel('y [m]')
+ax2.set_aspect('equal')
+ax2.set_xlabel('x [m]')
+ax2.set_ylabel('y [m]')
 cb = fig.colorbar(im, ax=ax2, orientation='horizontal', location='top', fraction=0.047, pad=0.02)
 cb.set_label(r'short wave $\eta$ [m], t = %.0f s' % t_snap)
 panel_tag(ax2, '(c)')
