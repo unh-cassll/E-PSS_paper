@@ -7,7 +7,7 @@ figures: aperture_field_stitch \
 	binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
-	DoLP_AOI_field \
+	DoLP_AOI_inference \
 	DoLP_AOI_gain \
 	Hm0_scatterplots_lidar_EPSS \
 	longwave_shortwave_demo \
@@ -45,9 +45,9 @@ directional_spectra: plot_directional_spectra.py
 	@echo "saved directional_spectra_polar.pdf to file"
 	@echo "saved directional_spectra_combined.pdf to file"
 
-DoLP_AOI_field: plot_DoLP_AOI_field.py
-	@python3 plot_DoLP_AOI_field.py
-	@echo "saved DoLP_AOI_field.pdf to file"
+DoLP_AOI_inference: plot_DoLP_AOI_inference.py
+	@python3 plot_DoLP_AOI_inference.py
+	@echo "saved DoLP_AOI_inference.pdf to file"
 
 DoLP_AOI_gain: plot_DoLP_AOI_gain.py
 	@python3 plot_DoLP_AOI_gain.py

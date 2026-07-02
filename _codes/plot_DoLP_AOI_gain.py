@@ -35,6 +35,8 @@ m_per_px = ds_Stokes["m_per_px"][:]
 
 N = ds_Stokes.dimensions["num_cols"].size
 
+LAB_GAIN = 1.0/0.81
+
 DoLP_gain = 0.4441/np.median(DoLP_camera)
 
 DoLP_array = np.sqrt(S1**2+S2**2)
@@ -54,8 +56,9 @@ fig = plt.figure(1,figsize=(fullwidth, fullwidth))
 gs = fig.add_gridspec(2, 2)
 
 ax1 = fig.add_subplot(gs[0, :])
-ax1.plot(out_theta,out_DOLP,linewidth=3,label="ideal Fresnel curve")
-ax1.plot(AOI_camera,DoLP_camera,linewidth=3,color=color_list[3],label=r"avg. observed DoLP($\theta_i$)")
+ax1.plot(out_theta,out_DOLP,':',linewidth=2,color='black',label="ideal Fresnel curve")
+ax1.plot(AOI_camera,DoLP_camera,linewidth=3,color=color_list[0],label=r"avg. observed DoLP($\theta_i$)")
+ax1.plot(AOI_camera,LAB_GAIN*DoLP_camera,linewidth=3,color=color_list[1],label="$ibid.$, lab gain")
 ax1.plot(AOI_camera,DoLP_gain*DoLP_camera,linewidth=3,color=color_list[2],label="$ibid.$, empirical gain")
 ax1.set_xticks(np.arange(0,105,15))
 ax1.set_xlim(0,90)
@@ -76,8 +79,8 @@ ax2.set_yticks([])
 
 ax2.text(25, 45, 'raw',
          fontsize=fsize,
-         color='black',
-         bbox=dict(facecolor=color_list[3], edgecolor='black', boxstyle='round,pad=0.5', alpha=1))
+         color='white',
+         bbox=dict(facecolor=color_list[0], edgecolor='white', boxstyle='round,pad=0.5', alpha=1))
 
 ax2.set_aspect(aspect=1)
 
