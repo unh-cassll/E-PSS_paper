@@ -54,19 +54,34 @@ slope_stats_uncertainties = [1e-2,1e-2,0.05,0.1,0.03]
 dolp_gain_choices = ['no gain','lab gain','empirical gain']
 
 U10_bin_centers, U10_bin_edges, dU = wind_speed_bins()
+# x-axis spans wind-speed bins: [Umin - dU/2, Umax + dU/2]
+U10_xlim = (U10_bin_centers[0] - dU/2, U10_bin_centers[-1] + dU/2)
+# ticks at every bin edge, inclusive of xmax
+U10_xticks = np.arange(U10_xlim[0], U10_xlim[1] + dU/2, dU)
 
-def zero_centered_limit(env):
-    # Symmetric y-limit about zero containing env (max |mean +/- 95% CI| over
-    # all gains and bins), rounded up to the nearest major tick. Tick step is
-    # drawn from the 1-2-5 family targeting ~6 ticks across the axis.
-    step_target = env/3.0
-    mag = 10.0**np.floor(np.log10(step_target))
-    for m in (1, 2, 5, 10):
-        step = m*mag
-        if step >= step_target:
-            break
-    limit = np.ceil(env/step - 1e-9)*step
-    return limit, step
+def fit_limits(lo, hi, n_target=5):
+    # Asymmetric y-limits fitted to [lo, hi] with small pad. Tick step from the
+    # 1-2-2.5-5 family, count closest to n_target intervals.
+    span = hi - lo
+    if span <= 0:
+        span = max(abs(hi), 1e-9)
+    pad = 0.08*span
+    ymin, ymax = lo - pad, hi + pad
+    rng = ymax - ymin
+    mag = 10.0**np.floor(np.log10(rng/n_target))
+    candidates = [m*mag for m in (1, 2, 2.5, 5, 10)]
+    step = candidates[0]
+    best_err = abs(rng/candidates[0] - n_target)
+    for s in candidates[1:]:
+        err = abs(rng/s - n_target)
+        if err < best_err:
+            best_err = err
+            step = s
+    # snap the limits outward to the nearest major tick so the axis spans exactly
+    # tick-to-tick (no partial gap beyond the outermost gridlines)
+    ymin = np.floor(ymin/step + 1e-9)*step
+    ymax = np.ceil(ymax/step - 1e-9)*step
+    return ymin, ymax, step
 
 #%% Upwind and crosswind mean square slope
 
@@ -116,7 +131,8 @@ for i in np.arange(2):
             
     axs[1-i].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
     axs[1-i].set_title(titles[i])
-    axs[1-i].set_xlim(0,14)
+    axs[1-i].set_xlim(*U10_xlim)
+    axs[1-i].set_xticks(U10_xticks)
     axs[1-i].set_ylim(0,0.045)
     
 
@@ -133,9 +149,10 @@ plt.savefig('../_figures/mss_upwind_crosswind.pdf',bbox_inches='tight')
 #%% Gram-Charlier coefficients from least-squares fits to slope PDFs
 
 # Grid placement (row, col) per coefficient and for the counts panel:
-# c22 upper-left, counts upper-right; c40/c04 middle row; c21/c03 bottom row.
-panel_positions = [(2,0),(2,1),(1,0),(1,1),(0,0)]  # c21,c03,c40,c04,c22
-counts_position = (0,1)
+# counts upper-left (panel a), c22 upper-right (panel b); c40/c04 middle row;
+# c21/c03 bottom row.
+panel_positions = [(2,0),(2,1),(1,0),(1,1),(0,1)]  # c21,c03,c40,c04,c22
+counts_position = (0,0)
 
 fig, axs = plt.subplots(3, 2, sharex=True, figsize=(fullwidth, fullheight*0.9))
 
@@ -143,7 +160,7 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
 
     all_values = ds[slope_stats_output_names[i]][:]
 
-    env = 0.0  # max |mean +/- 95% CI| over all gains/bins, for the y-limit
+    env_lo, env_hi = np.inf, -np.inf  # signed envelope over all gains/bins, for the y-limit
 
     for j in np.arange(len(dolp_gain_choices)):
 
@@ -160,7 +177,8 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
         bin_upper = bin_means + bin_95CI
         bin_lower = bin_means - bin_95CI
 
-        env = np.nanmax([env, np.nanmax(np.abs(bin_upper)), np.nanmax(np.abs(bin_lower))])
+        env_lo = np.nanmin([env_lo, np.nanmin(bin_lower)])
+        env_hi = np.nanmax([env_hi, np.nanmax(bin_upper)])
 
         # Signal-to-noise of the empirical-gain bin means (flags unresolved coefficients)
         if dolp_gain_choices[j] == 'empirical gain':
@@ -171,42 +189,68 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
         axs[row_index,col_index].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[j], alpha=0.25)
         axs[row_index,col_index].plot(U10_bin_centers,bin_means,'-',linewidth=2,label=dolp_gain_choices[j],markersize=10)
 
-    bin_upper = BH_slope_stats[slope_stats_output_names[i]] + slope_stats_uncertainties[i]
-    bin_lower = BH_slope_stats[slope_stats_output_names[i]] - slope_stats_uncertainties[i]
-    
+    varkey = slope_stats_output_names[i]
+    unc = slope_stats_uncertainties[i]
+    bin_upper = BH_slope_stats[varkey] + unc
+    bin_lower = BH_slope_stats[varkey] - unc
+
     axs[row_index,col_index].fill_between(BH_slope_stats['U10'], bin_upper, bin_lower, color='black', alpha=0.15)
-    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[slope_stats_output_names[i]],label='B & H [2006]',color='black',linewidth=2)
-    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[slope_stats_output_names[i]],':',label='C & M [1954]',color='black',linewidth=2)
+    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[varkey],label='B & H [2006]',color='black',linewidth=2)
+    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[varkey],':',label='C & M [1954]',color='black',linewidth=2)
     axs[row_index,col_index].set_ylabel(varname)
-    axs[row_index,col_index].set_xlim(0,14)
-    ylimit, ytick = zero_centered_limit(env)
-    axs[row_index,col_index].set_ylim(-ylimit, ylimit)
-    axs[row_index,col_index].set_yticks(np.arange(-ylimit, ylimit + ytick/2, ytick))
+    axs[row_index,col_index].set_xlim(*U10_xlim)
+
+    # Fold visible reference curves into the envelope so neither line is clipped
+    vis = (U10_m_s_vec >= U10_xlim[0]) & (U10_m_s_vec <= U10_xlim[1])
+    ref_vals = np.concatenate([(BH_slope_stats[varkey].values + unc)[vis],
+                               (BH_slope_stats[varkey].values - unc)[vis],
+                               CM_slope_stats[varkey].values[vis]])
+    env_lo = np.nanmin([env_lo, np.nanmin(ref_vals)])
+    env_hi = np.nanmax([env_hi, np.nanmax(ref_vals)])
+
+    ymin, ymax, ytick = fit_limits(env_lo, env_hi)
+    axs[row_index,col_index].set_ylim(ymin, ymax)
+    yt0 = np.ceil(ymin/ytick - 1e-9)*ytick
+    axs[row_index,col_index].set_yticks(np.arange(yt0, ymax + ytick/2, ytick))
     axs[row_index,col_index].set_xticks(np.arange(0,16,2))
     axs[row_index,col_index].text(0.05,0.95,panel_labels[2*row_index+col_index],fontsize=fsize,ha='center',va='center',zorder=7,transform=axs[row_index,col_index].transAxes)
 
     if row_index == 2:
         axs[row_index,col_index].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
 
-    # Skewness coefficients (c21, c03) never reach 2-sigma significance in any
-    # wind bin (empirical-gain SNR < 2 throughout); cover and mark as unresolved.
-    if slope_stats_output_names[i] in ('c21','c03') and np.nanmax(bin_SNR[1::]) < 2.0:
+    # if c21, c03: shade as unresolved unless at least two wind bins clear SNR >= 2
+    # (a single marginal bin is not enough to call the coefficient resolved).
+    if slope_stats_output_names[i] in ('c21','c03') and np.sum(bin_SNR[1::] >= 2.0) < 2:
         axs[row_index,col_index].axhline(0.0, color='0.5', linewidth=0.8, linestyle='--', zorder=0)
         axs[row_index,col_index].add_patch(plt.Rectangle((0,0),1,1,transform=axs[row_index,col_index].transAxes,
             facecolor='0.5', alpha=0.4, zorder=5))
-        axs[row_index,col_index].text(0.5,0.05,'not resolved (SNR < 2)',fontsize=fsize,
+        axs[row_index,col_index].text(0.5,0.9,'not resolved (SNR < 2)',fontsize=fsize,
             ha='center',va='bottom',style='italic',color='red',zorder=6,
             transform=axs[row_index,col_index].transAxes)
 
-    if i == 4:
-        axs[row_index,col_index].legend(loc='lower left')
+    # On-panel labels in place of a legend
+    if varkey == 'c22':   # panel (b): colored gain options + B & H reference
+        for k, name in enumerate(dolp_gain_choices):
+            axs[row_index,col_index].text(0.95, 0.93 - 0.12*k, name, color=color_list[k],
+                transform=axs[row_index,col_index].transAxes, fontsize=fsize,
+                ha='right', va='top', fontweight='bold', zorder=7)
+        axs[row_index,col_index].annotate('B & H [2006]',
+            xy=(5, BH_slope_stats['c22'].values[0]), xytext=(6, -0.1),
+            ha='center', va='center', color='black', fontsize=fsize, zorder=7,
+            arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))
+    if varkey == 'c40':   # panel (c): C & M reference
+        axs[row_index,col_index].annotate('C & M [1954]',
+            xy=(13, CM_slope_stats['c40'].values[0]), xytext=(11.8, 0.85),
+            ha='center', va='center', color='black', fontsize=fsize, zorder=7,
+            arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))
 
 row_index, col_index = counts_position
 
 axs[row_index,col_index].bar(U10_bin_centers,bin_counts,color='black',label='counts',width=dU,alpha=0.5)
 
 axs[row_index,col_index].set_ylabel('counts per bin')
-axs[row_index,col_index].set_xlim(0,14)
+axs[row_index,col_index].set_xlim(*U10_xlim)
+axs[row_index,col_index].set_xticks(U10_xticks)
 axs[row_index,col_index].set_ylim(0,40)
 axs[row_index,col_index].set_xticks(np.arange(0,16,2))
 axs[row_index,col_index].text(0.05,0.95,panel_labels[2*row_index+col_index],fontsize=fsize,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
@@ -214,3 +258,5 @@ axs[row_index,col_index].text(0.05,0.95,panel_labels[2*row_index+col_index],font
 plt.tight_layout()
 
 plt.savefig('../_figures/slope_distribution_GC_coeffs.pdf',bbox_inches='tight')
+
+# %%

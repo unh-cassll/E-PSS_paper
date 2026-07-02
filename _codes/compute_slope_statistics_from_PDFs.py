@@ -55,17 +55,18 @@ else:
     
     ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
-    U_m_s = ds_other["EC_U_m_s"][:]
-    ustar_m_s = ds_other["EC_ustar_m_s"][:]
-    z_m_above_water = ds_other["EC_z_m_above_water"][:]
-    
-    # Log-law height adjustment to 10 m (natural log)
-    U10_m_s = ustar_m_s/kappa*np.log(10.0/z_m_above_water) + U_m_s
+    # Best 10-m wind speed (COARE, BUZM3 fallback) -> all 190 runs covered
+    U10_m_s = np.ma.filled(ds_other["U10_best"][:].astype(float), np.nan)
 
     num_runs = len(U10_m_s)
     num_samples = ds_no["slope_east"].shape[1]
 
-    COARE_Wdir_vec = np.reshape(ds_other["COARE_Wdir"][:],(num_runs,1,1))
+    # Wind-from direction for the upwind/crosswind rotation: COARE, with BUZM3
+    # fallback where COARE is missing (mirrors the U10_best pairing)
+    COARE_Wdir = np.ma.filled(ds_other["COARE_Wdir"][:].astype(float), np.nan)
+    buzm3_Wdir = np.ma.filled(ds_other["buzm3_WDIR"][:].astype(float), np.nan)
+    Wdir_best = np.where(np.isfinite(COARE_Wdir), COARE_Wdir, buzm3_Wdir)
+    COARE_Wdir_vec = np.reshape(Wdir_best,(num_runs,1,1))
 
     slope_north = np.nan*np.ones((num_runs,num_samples,3))
     slope_east = np.nan*np.ones((num_runs,num_samples,3))
