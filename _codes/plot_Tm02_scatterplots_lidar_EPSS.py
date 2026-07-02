@@ -1,8 +1,6 @@
 """
-Scatterplot of mean zero-crossing period Tm02 = sqrt(m0/m2): E-PSS vs. lidar
-reference. Compares no/lab/empirical DoLP gain corrections. The f^2-weighted
-Tm02 is markedly more robust than the energy period T_E to the 1/k^2-amplified
-low-frequency E-PSS noise (which biases low-frequency-weighted periods high).
+Scatterplot of Tm02 = sqrt(m0/m2): E-PSS vs. lidar reference.
+Compares no/lab/empirical DoLP gain corrections.
 """
 
 import pandas as pd
@@ -86,13 +84,13 @@ write_tex_macros('Tm02_values.tex', {
 }, source='plot_Tm02_scatterplots_lidar_EPSS.py')
 
 draw_metrics_box(plt.gca(), metrics, ['none', 'lab', 'emp'], color_list[:3],
-                 ('s', 's'), box_xy=(0.012, 0.712), box_w=0.651, box_h=0.278,
+                 ('s', 's'), box_xy=(0.339, 0.012), box_w=0.651, box_h=0.278,
                  col_step=0.14, unit_dx=0.11, fsize=fsize)
 
 plt.xticks(np.linspace(2,8,7))
 plt.yticks(np.linspace(2,8,7))
-plt.xlim(2,8)
-plt.ylim(2,8)
+plt.xlim(2,7)
+plt.ylim(2,7)
 
 plt.xlabel(r'$T_{m02}$, lidar [s]')
 plt.ylabel(r'$T_{m02}$, E-PSS [s]')
