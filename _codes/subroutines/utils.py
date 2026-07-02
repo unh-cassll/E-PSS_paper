@@ -12,7 +12,6 @@ Project-specific helpers for the E-PSS paper.
     mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
     compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier slope PDF
     fit_gram_charlier_slope_pdf           least-squares Gram-Charlier fit
-    slope_to_elev_wavelet                 1-D wavelet slope-to-elevation inversion
     omni_complete_spectrum                directionally-complete (S_sx+S_sy)/k^2 spectrum
     compute_mean_wave_direction_and_spreading
 """
@@ -31,16 +30,9 @@ from scipy.optimize import minimize
 from scipy.signal import detrend
 from scipy.signal.windows import tukey
 
-# Internal-only upstream imports (underscore-aliased so they do not leak
-# through `from subroutines.utils import *`).
+# Internal imports; underscore-aliased to avoid leaking via `import *`.
 from eta_field_recon import lindisp_with_current as _lindisp_with_current
 from eta_field_recon import aperture_transfer_function as _aperture_transfer_function
-from eta_field_recon.wavelet_core import (
-    _cwt as _ewdm_cwt,
-    _inverse_cwt as _ewdm_icwt,
-    krogstad_eta_coeffs as _krogstad_eta_coeffs,
-    skirt_correction as _skirt_correction,
-)
 
 __all__ = [
     'GRAV', 'L_FOV_M', 'N_PX', 'DX_M', 'WATER_DEPTH_M', 'FS_HZ', 'NUM_RUNS',
@@ -48,14 +40,13 @@ __all__ = [
     'figure_style', 'wind_speed_bins', 'write_tex_macros',
     'scatter_metrics', 'draw_metrics_box', 'ewdm_low_cutoff', 'epss_ewdm_grids',
     'mueller_calc_full', 'compute_gram_charlier_slope_pdf',
-    'fit_gram_charlier_slope_pdf', 'slope_to_elev_wavelet',
+    'fit_gram_charlier_slope_pdf',
     'omni_complete_spectrum', 'compute_mean_wave_direction_and_spreading',
 ]
 
 # %%
 
-# Canonical ASIT2019 / E-PSS deployment constants (single source of truth for
-# values repeated across the compute and plot scripts)
+# Canonical ASIT2019 / E-PSS deployment constants
 
 GRAV = 9.81             # gravitational acceleration [m/s^2]
 L_FOV_M = 2.915         # imaged-patch side length [m]
@@ -119,11 +110,11 @@ def figure_style(title_fontsize=10, label_fontsize=10, tick_fontsize=10):
 
 # %%
 
-# Canonical fixed-width U10 bins for wind-binned figures; Umin/Umax are the outer edges
+# Canonical fixed-width U10 bins; Umin/Umax are the outer edges [m/s]
 
 # N. Laxague 2026
 
-def wind_speed_bins(Umin=0.0, Umax=14.0, dU=2.0):
+def wind_speed_bins(Umin=1.0, Umax=13.0, dU=2.0):
 
     edges = np.arange(Umin, Umax + dU / 2, dU)
     centers = edges[:-1] + dU / 2
@@ -132,35 +123,36 @@ def wind_speed_bins(Umin=0.0, Umax=14.0, dU=2.0):
 
 # %%
 
-# Write computed figure values as LaTeX macros for \input into paper.tex, so the
-# numbers in captions/text/tables stay in sync with the figures that produce them.
+# Write computed values as LaTeX macros for \input into paper.tex.
 
 # N. Laxague 2026
 
 def write_tex_macros(filename, macros, source=None, directory='../_tex'):
-    r"""Write a LaTeX macro file (one value per \newcommand) for \input into paper.tex.
+    r"""Write a LaTeX macro file (one \newcommand per value) for \input into paper.tex.
 
-    filename  : output name, e.g. 'Hm0_values.tex'; written under `directory`
-                (default '../_tex' -> repo-root/_tex when run from _codes).
-    macros    : dict {name: value}. `name` must be letters only (a valid LaTeX
-                control sequence); prefix per figure to avoid clashes across files
-                (e.g. 'HmRMSEemp'). `value` is stringified -- pass a pre-formatted
-                string for explicit precision, e.g. f'{x:.2f}'.
-    source    : optional producing-script name, recorded in the file header.
+    filename  : output filename, e.g. 'Hm0_values.tex'; written under `directory`
+                (default '../_tex').
+    macros    : dict {name: value}. `name` must be letters only; `value` is
+                stringified (pass a pre-formatted string for explicit precision).
+    source    : optional producing-script name for the file header.
 
-    Each macro is emitted as
-        \providecommand{\name}{}\renewcommand{\name}{value}
-    so re-running the figure (or re-\input) never raises 'already defined'. The file
-    is written atomically. Use inline in paper.tex as \name (e.g. \HmRMSEemp)."""
-    import os, re
-    bad = sorted(k for k in macros if not re.fullmatch('[A-Za-z]+', k))
+    Each macro is emitted as \providecommand{\name}{}\renewcommand{\name}{value}
+    (safe on re-\input). File is written atomically."""
+    import os
+    import re
+    bad = []
+    for name in macros:
+        if not re.fullmatch('[A-Za-z]+', name):
+            bad.append(name)
+    bad = sorted(bad)
     if bad:
         raise ValueError('LaTeX macro names must be letters only; invalid: %s' % bad)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, filename)
     header = '%% auto-generated%s; do not edit by hand\n' % (' by ' + source if source else '')
-    body = ''.join('\\providecommand{\\%s}{}\\renewcommand{\\%s}{%s}\n' % (k, k, v)
-                   for k, v in macros.items())
+    body = ''
+    for name, value in macros.items():
+        body += '\\providecommand{\\%s}{}\\renewcommand{\\%s}{%s}\n' % (name, name, value)
     tmp = path + '.tmp'
     with open(tmp, 'w') as fh:
         fh.write(header + body)
@@ -169,19 +161,20 @@ def write_tex_macros(filename, macros, source=None, directory='../_tex'):
 
 # %%
 
-# Scatter-comparison metrics and the inset metrics table shared by the
-# Hm0/Tm02 lidar-vs-E-PSS figures
+# Scatter-comparison metrics and inset metrics table for Hm0/Tm02 figures
 
 
 def scatter_metrics(x, y):
-    """(R^2, RMSE, slope, intercept) of y vs x over finite pairs."""
+    """(R^2, RMSE, slope, bias) of y vs x over finite pairs. bias = mean(y - x),
+    not the regression intercept."""
     x = np.asarray(x, float)
     y = np.asarray(y, float)
     keep = np.isfinite(x) & np.isfinite(y)
     rmse = float(np.sqrt(np.mean((y[keep] - x[keep])**2)))
     r = np.corrcoef(x[keep], y[keep])[0, 1]
-    slope, intercept = np.polyfit(x[keep], y[keep], 1)
-    return r**2, rmse, float(slope), float(intercept)
+    slope, _ = np.polyfit(x[keep], y[keep], 1)
+    bias = float(np.mean(y[keep] - x[keep]))
+    return r**2, rmse, float(slope), bias
 
 
 def draw_metrics_box(ax, metrics, labels, colors, units, box_xy, box_w, box_h,
@@ -193,7 +186,8 @@ def draw_metrics_box(ax, metrics, labels, colors, units, box_xy, box_w, box_h,
                                color='k', alpha=0.95, edgecolor='k', linewidth=2))
     ax.add_patch(plt.Rectangle(box_xy, box_w, box_h, transform=ax.transAxes,
                                color='w', alpha=0.95, edgecolor='k', linewidth=0.5))
-    x0, y0 = 0.02, 0.93
+    # Text origin anchored at box_xy lower-left corner
+    x0, y0 = box_xy[0] + 0.008, box_xy[1] + box_h - 0.06
     ax.text(x0, y0, 'R²\nRMSE\nslope\nbias', transform=ax.transAxes,
             fontsize=fsize, verticalalignment='top')
     ax.text(x0 + 0.12, y0, ' = \n = \n = \n = ', transform=ax.transAxes,
@@ -253,7 +247,6 @@ def mueller_calc_full(n,Ssky,Sup):
     DoLP = np.sqrt(S1**2+S2**2+S3**2)/S0;
     DoLP[0] = DoLP[1] - (DoLP[2]-DoLP[1]);
 
-    # Assign output
     out_theta = 180/np.pi*theta_i;
     out_DOLP = DoLP;
 
@@ -319,10 +312,9 @@ def compute_gram_charlier_slope_pdf(U10_m_s):
 
 def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
 
-    # xi (crosswind) on axis 0, zeta (upwind) on axis 1 to match P_slope_c_u; 'xy' would transpose the model
+    # xi (crosswind) on axis 0, zeta (upwind) on axis 1, indexing='ij' to match P_slope_c_u
     xi, zeta = np.meshgrid(slope_centers / np.sqrt(mss_c), slope_centers / np.sqrt(mss_u), indexing='ij')
 
-    # Function to fit
     def fit(b, x, y):
         coeff = (2 * np.pi * np.sqrt(mss_u) * np.sqrt(mss_c)) ** -1
         return coeff * np.exp(-(x**2 + y**2) / 2) * (
@@ -334,25 +326,21 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
             1/4 * b[4] * (x**2 - 1) * (y**2 - 1)
         )
 
-    # Least-Squares cost function
     def cost_function(b):
         return np.sum((fit(b, xi, zeta) - P_slope_c_u) ** 2)
 
-    # Minimize Least-Squares
     initial_guess = np.zeros(5)
     result = minimize(cost_function, initial_guess)
 
-    # Calculate fitted values and residuals
     P_fit = fit(result.x, xi, zeta)
     residuals = P_fit - P_slope_c_u
 
-    # Calculate goodness of fit metrics
     ss_res = np.sum(residuals ** 2)  # Residual sum of squares
     ss_tot = np.sum((P_slope_c_u - np.mean(P_slope_c_u)) ** 2)  # Total sum of squares
     r_squared = 1 - (ss_res / ss_tot)  # R-squared
-    rmse = np.sqrt(ss_res / np.size(P_slope_c_u))  # Root Mean Square Error
+    rmse = np.sqrt(ss_res / np.size(P_slope_c_u))  # RMSE
 
-    # Send G-C fit and skewness/kurtosis coefficients to output structure
+    # G-C fit and skewness/kurtosis coefficients
     out_struc = {
         'P_fit': P_fit,                    # Gram-Charlier expansion fit
         'c21': result.x[0],                # skewness, upwind
@@ -368,165 +356,18 @@ def fit_gram_charlier_slope_pdf(slope_centers, P_slope_c_u, mss_u, mss_c):
 
 # %%
 
-# 1-D wavelet inversion of earth-referenced slope (s_east, s_north) to surface elevation.
-# Composed from eta_field_recon.wavelet_core primitives (CWT, Krogstad projection, iCWT).
-#
-# N. Laxague 2026
-
-def slope_to_elev_wavelet(
-    slope_east: np.ndarray,
-    slope_north: np.ndarray,
-    water_depth_m: float,
-    fs_Hz: float,
-    fmin_Hz: float = 0.08,
-    fmax_Hz: float = None,
-    transition_octaves: float = 0.25,
-    tukey_alpha: float = 0.25,
-    per_scale: bool = True,
-    skirt_correct: bool = True,
-    window_power_correct: bool = False,
-    lf_noise_suppress: bool = False,
-    lf_noise_band_Hz: tuple = (2.0, 4.5),
-    lf_noise_oversub: float = 1.0,
-    highpass_peak_fraction: float = None,
-    highpass_peak_floor_Hz: float = 0.08,
-    highpass_corner_floor_Hz: float = 0.06,
-) -> np.ndarray:
-    """1-D wavelet slope-to-elevation inversion (Krogstad signed projection).
-
-    Composes eta_field_recon CWT and Krogstad-projection primitives.
-    CWT grid: linspace(0.05, 2.0, 80) Hz. Sigmoidal bandpass suppresses
-    the low-frequency 1/k blow-up. per_scale and skirt_correct use upstream
-    per-frequency calibration and Krogstad 1/k(omega) skirt reshaping.
-
-    Args:
-        slope_east, slope_north : (T,) earth-referenced slope time series
-        water_depth_m           : water depth (m)
-        fs_Hz                   : sampling frequency (Hz)
-        fmin_Hz, fmax_Hz        : -6 dB corners of the sigmoidal bandpass (Hz);
-                                  pass None to disable that side.
-        transition_octaves      : sigmoid transition width (octaves)
-        tukey_alpha             : Tukey window cosine fraction (edge taper)
-        lf_noise_suppress       : if True, apply Wiener spectral subtraction of
-                                  the white slope noise amplified by 1/k^2
-        lf_noise_band_Hz        : (lo, hi) band for slope noise floor estimate (Hz)
-        lf_noise_oversub        : Wiener over-subtraction factor (1 = exact)
-        highpass_peak_fraction  : if set, place the HP corner adaptively at
-                                  this fraction of the spectral peak fp, searched
-                                  over [highpass_peak_floor_Hz, 0.40 Hz]
-        highpass_peak_floor_Hz  : lower bound of the fp search (Hz)
-        highpass_corner_floor_Hz: absolute lower clamp on the adaptive HP corner (Hz)
-        window_power_correct    : if True, divide eta by sqrt(mean(w^2)) to
-                                  debias variance over the full tapered record
-
-    Returns:
-        eta_m : (T,) reconstructed surface elevation (m)
-    """
-    sE = np.asarray(slope_east, dtype=float).reshape(-1)
-    sN = np.asarray(slope_north, dtype=float).reshape(-1)
-    if sE.size != sN.size:
-        raise ValueError("slope_east and slope_north must have the same length")
-
-    freqs = np.linspace(0.05, 2.0, 80)
-
-    # Linear detrend removes static viewing-angle tilt and slow drift
-    sE = detrend(sE, type="linear")
-    sN = detrend(sN, type="linear")
-
-    # Adaptive highpass corner from slope-implied eta spectral peak
-    fmin_eff = fmin_Hz
-    if highpass_peak_fraction is not None and fmin_Hz is not None:
-        nps = int(min(512, len(sE)))
-        fW, PsE_ = signal.welch(sE, fs_Hz, nperseg=nps)
-        _, PsN_ = signal.welch(sN, fs_Hz, nperseg=nps)
-        _, kW = _lindisp_with_current(2 * np.pi * np.maximum(fW, 1e-6),
-                                      water_depth_m, 0.0)
-        kW = np.nan_to_num(np.asarray(kW, dtype=float), nan=np.inf, posinf=np.inf)
-        eta_ideal = (PsE_ + PsN_) / np.maximum(kW ** 2, 1e-12)
-        sel = (fW >= highpass_peak_floor_Hz) & (fW <= 0.40)
-        if sel.any():
-            fp = fW[sel][int(np.argmax(eta_ideal[sel]))]
-            # corner tied to fp; floored at CWT-edge safety floor
-            fmin_eff = max(highpass_corner_floor_Hz, highpass_peak_fraction * fp)
-
-    w = tukey(len(sE), alpha=tukey_alpha)
-    sE_w = sE * w
-    sN_w = sN * w
-
-    Wsx = _ewdm_cwt(sE_w, freqs=freqs, fs=fs_Hz).values
-    Wsy = _ewdm_cwt(sN_w, freqs=freqs, fs=fs_Hz).values
-
-    _, k_disp = _lindisp_with_current(2 * np.pi * freqs, water_depth_m, 0.0)
-
-    if skirt_correct:
-        skirt_gain = _skirt_correction(
-            freqs, fs_Hz, k_disp, len(sE),
-            per_scale=per_scale, temporal_alpha=tukey_alpha,
-        )
-    else:
-        skirt_gain = None
-    W_eta, _, _ = _krogstad_eta_coeffs(Wsx, Wsy, k_disp, skirt_gain=skirt_gain)
-
-    # Sigmoidal bandpass on elevation wavelet coefficients
-    bandpass = np.ones_like(freqs)
-    log2f = np.log2(freqs)
-    if fmin_Hz is not None:
-        bandpass *= 1.0 / (1.0 + np.exp(
-            -(log2f - np.log2(fmin_eff)) / transition_octaves
-        ))
-    if fmax_Hz is not None:
-        bandpass *= 1.0 / (1.0 + np.exp(
-            (log2f - np.log2(fmax_Hz)) / transition_octaves
-        ))
-    W_eta = W_eta * bandpass[:, None]
-
-    eta = _ewdm_icwt(W_eta, freqs=freqs, fs=fs_Hz, per_scale=per_scale)
-    eta = np.asarray(eta, dtype=float)
-
-    # Up-positive sign set upstream in krogstad_eta_coeffs (+1j convention).
-    # Spectra/Hm0 are quadratic and blind to the sign; only a waveform check
-    # (synthetic unit cosine, ASIT2019 lidar) constrains it.
-
-    if window_power_correct:
-        eta = eta / np.sqrt(np.mean(w ** 2))
-
-    if lf_noise_suppress:
-        n = len(eta)
-        nps = int(min(512, n))
-        # White slope noise floor (median over high-f band)
-        fS, PsE = signal.welch(sE, fs_Hz, nperseg=nps)
-        _, PsN = signal.welch(sN, fs_Hz, nperseg=nps)
-        mb = (fS >= lf_noise_band_Hz[0]) & (fS <= lf_noise_band_Hz[1])
-        Ns = 0.5 * (np.median(PsE[mb]) + np.median(PsN[mb]))
-        # Elevation noise PSD per unit slope noise, through this inversion
-        fT, T_noise = _lf_noise_transfer(
-            fs_Hz, n, water_depth_m, fmin_Hz, fmax_Hz, transition_octaves,
-            tukey_alpha, per_scale, skirt_correct, nps)
-        _, P_eta = signal.welch(eta, fs_Hz, nperseg=nps)
-        G = 1.0 - lf_noise_oversub * (Ns * T_noise) / np.maximum(P_eta, 1e-30)
-        G = np.clip(G, 0.0, 1.0)
-        G = np.convolve(G, np.ones(5) / 5, mode="same")
-        F = np.fft.rfft(eta); ff = np.fft.rfftfreq(n, d=1.0 / fs_Hz)
-        gain = np.sqrt(np.clip(np.interp(ff, fT, G, left=G[0], right=1.0), 0.0, 1.0))
-        eta = np.fft.irfft(F * gain, n)
-
-    return eta
-
-
 def omni_complete_spectrum(slope_east, slope_north, water_depth_m, fs_Hz,
                            fmin_Hz=0.08, transition_octaves=0.25,
                            nfft=3000, nperseg=1500, highpass_peak_fraction=None,
                            highpass_peak_floor_Hz=0.08, highpass_corner_floor_Hz=0.06,
                            aperture_diameter_m=None, aperture_min_transfer=0.5):
     """Directionally-complete omnidirectional elevation spectrum (S_sx+S_sy)/k^2
-    with a squared logistic high-pass (corner fixed at fmin_Hz, or adaptive at
-    highpass_peak_fraction * spectral peak when set).
+    with a squared logistic high-pass (corner fmin_Hz, or adaptive at
+    highpass_peak_fraction * fp when set).
 
-    aperture_diameter_m: if set, divide out the circular-disc aperture transfer
-    H(k)^2 (jinc), undoing the spatial low-pass of averaging slope over the disc.
-    The gain is capped at 1/aperture_min_transfer^2 (frozen where H<min_transfer)
-    so the near-null region is not noise-amplified; this recovers the high-f
-    spectrum up to ~H=0.5 (a single disc cannot recover its nulled band)."""
+    aperture_diameter_m: if set, divide out the circular-disc aperture MTF H(k)^2
+    (jinc), capped at 1/aperture_min_transfer^2 to avoid noise amplification near
+    nulls."""
     sE = np.asarray(slope_east, dtype=float).reshape(-1)
     sN = np.asarray(slope_north, dtype=float).reshape(-1)
     sE = np.where(np.isfinite(sE), sE, 0.0)
@@ -551,42 +392,6 @@ def omni_complete_spectrum(slope_east, slope_north, water_depth_m, fs_Hz,
             -(np.log2(np.maximum(f, 1e-9)) - np.log2(corner)) / transition_octaves))
         S = S * hp ** 2
     return f, S
-
-
-# Cache: elevation noise PSD per unit white-slope-noise PSD, through the exact
-# inversion. Run-independent (depends only on config), so computed once.
-_LF_NOISE_TRANSFER_CACHE = {}
-
-
-def _lf_noise_transfer(fs_Hz, n, water_depth_m, fmin_Hz, fmax_Hz,
-                       transition_octaves, tukey_alpha, per_scale, skirt_correct,
-                       nperseg, nrel=4):
-    """Welch PSD of the reconstructed elevation when the input slope is unit-PSD
-    white noise, averaged over `nrel` realizations and cached on the config."""
-    key = (round(float(fs_Hz), 6), int(n), round(float(water_depth_m), 6),
-           None if fmin_Hz is None else round(float(fmin_Hz), 6),
-           None if fmax_Hz is None else round(float(fmax_Hz), 6),
-           round(float(transition_octaves), 6), round(float(tukey_alpha), 6),
-           bool(per_scale), bool(skirt_correct), int(nperseg))
-    cached = _LF_NOISE_TRANSFER_CACHE.get(key)
-    if cached is not None:
-        return cached
-    sigma = np.sqrt(fs_Hz / 2.0)          # one-sided white PSD == 1
-    Pacc = None; fref = None
-    for r in range(nrel):
-        rng = np.random.default_rng(1234 + r)
-        nE = sigma * rng.standard_normal(n)
-        nN = sigma * rng.standard_normal(n)
-        en = slope_to_elev_wavelet(
-            nE, nN, water_depth_m, fs_Hz, fmin_Hz=fmin_Hz, fmax_Hz=fmax_Hz,
-            transition_octaves=transition_octaves, tukey_alpha=tukey_alpha,
-            per_scale=per_scale, skirt_correct=skirt_correct,
-            lf_noise_suppress=False)
-        fref, Pen = signal.welch(en, fs_Hz, nperseg=nperseg)
-        Pacc = Pen if Pacc is None else Pacc + Pen
-    Pacc /= nrel
-    _LF_NOISE_TRANSFER_CACHE[key] = (fref, Pacc)
-    return fref, Pacc
 
 
 # %%
@@ -624,8 +429,7 @@ def compute_mean_wave_direction_and_spreading(F_dirspec,theta_halfwidth,smoothnu
     ind_p = np.argmax(Dtheta.data)
 
     theta_super = np.concatenate((wavedir-360,wavedir,wavedir+360),axis=0)
-    # round off float noise so the periodic window keeps exactly one image of
-    # each bin (else a bin 180 deg from the peak can appear twice)
+    # round to avoid float noise duplicating bins at +/-180 deg boundary
     theta_rel = np.round(theta_super - wavedir.data[ind_p], 3)
     D_array_super = np.concatenate((D_array.data,D_array.data,D_array.data),axis=1)
     F_array_super = np.concatenate((spec_energy_density,spec_energy_density,spec_energy_density),axis=1)

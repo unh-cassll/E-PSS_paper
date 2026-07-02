@@ -1,32 +1,24 @@
-"""Multi-aperture directional wave spectra for small field-of-view virtual-staff
-elevation arrays. Resolves each wavenumber octave with a matched aperture and
-stitches them, giving F(f,theta), F(k,theta), Q(nu,theta).
+"""E-PSS PSS slope->elevation front end for the multi-aperture directional method.
 
-core: portable estimator (numpy/xarray/ewdm only).
-pss:  E-PSS project glue (build_eta_field, sftheta_sign_anchor; needs pyGrad2Surf).
+The multi-aperture estimator itself now lives in `ewdm.MultiApertureArrays`
+(upstreamed via extended-wdm PR #16). This package retains only the project glue
+that ewdm has no equivalent for: the slope-field -> elevation reconstruction and
+the 3-D-FFT sign anchor.
+
+    pss: build_eta_field, fourier_slope_projection, wavelet_slope_projection,
+         sftheta_sign_anchor (needs pyGrad2Surf).
 
 Typical use (validated E-PSS config: gated de-piston |k| solve + staggered apertures):
-    from multiaperture import build_eta_field, multiaperture_spectra, default_grids
+    from multiaperture import build_eta_field, sftheta_sign_anchor
+    from ewdm import MultiApertureArrays
+    from ewdm.multiaperture import default_apertures
     eta, dx, eta_solve = build_eta_field(slope_east, slope_north, depth, fs,
                                          depiston_n=2.0)
-    freqs, k_grid, nu_grid = default_grids(dx)
-    out = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, depth, fs,
-                                solve_eta=eta_solve)
+    out = MultiApertureArrays.from_field(eta, dx, depth, fs).compute(
+        apertures=default_apertures(), reliability_gate=None, solve_eta=eta_solve)
 """
-from .core import (
-    GRAV, k_dispersion, circ_stats, erode_valid, seed_aperture, aperture_band,
-    default_apertures, default_grids, cwt_stack, solve_wavevectors, lh_direction,
-    multiaperture_spectra)
+from .pss import (build_eta_field, fourier_slope_projection, wavelet_slope_projection,
+                  sftheta_sign_anchor, anchored_freq_recolor, L_FOV)
 
-# keep core importable where project glue dependencies are absent
-try:
-    from .pss import (build_eta_field, recolored_long_wave, sftheta_sign_anchor,
-                      L_FOV)
-except Exception:   # pragma: no cover
-    pass
-
-__all__ = [
-    'k_dispersion', 'circ_stats', 'erode_valid', 'seed_aperture', 'aperture_band',
-    'default_apertures', 'default_grids', 'cwt_stack', 'solve_wavevectors',
-    'lh_direction', 'multiaperture_spectra',
-    'build_eta_field', 'recolored_long_wave', 'sftheta_sign_anchor', 'L_FOV', 'GRAV']
+__all__ = ['build_eta_field', 'fourier_slope_projection', 'wavelet_slope_projection',
+           'sftheta_sign_anchor', 'anchored_freq_recolor', 'L_FOV']

@@ -1,7 +1,7 @@
 """
 Compute per-run E-PSS multi-aperture elevation directional spectra (f, k, nu)
 from the earth-referenced PSS slope fields. Slope fields -> camera elevation
-field (small-aperture Krogstad long wave + per-frame g2s) -> multi-aperture
+field (Fourier slope-projection long wave + per-frame g2s) -> multi-aperture
 virtual-staff EWDM estimator, with the 180-deg sign resolved by the direct
 S_f_theta 3-D-FFT anchor and an onshore swell tiebreaker.
 
@@ -22,22 +22,24 @@ from subroutines.utils import (DX_M, WATER_DEPTH_M, FS_HZ, NUM_RUNS, NUM_SAMPLES
                                epss_ewdm_grids)
 
 path = '../_data/'
-# input slope fields and output spectra are overridable via env vars (defaults
-# unchanged) so a re-normalized slope-field run can be produced alongside the original
+# input/output files overridable via env vars
 slope_field_file = path + os.environ.get('EPSS_FLD', 'ASIT2019_slope_fields_reduced.nc')
 output_file = path + os.environ.get('EPSS_OUT', 'ASIT2019_EPSS_directional_spectra.nc')
 fs, water_depth_m, num_samples, num_runs = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES, NUM_RUNS
-# de-piston cut wavelength as a multiple of the frame size (n*L); larger n = more
-# aggressive de-piston. Krogstad long-wave slope averaged over a centered disc of
-# this diameter [px]. Overridable per sweep member.
+# de-piston corner k_n = 2*pi/(n*L); n=2.0 lifts the high-wind FOV-scale F(k) plateau
 depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 2.0))
-krog_disc = int(os.environ.get('EPSS_KROG_DISC', 32))
-# band-limit the long-wave recolor below this frequency [Hz] so its FOV-scale
-# boost does not double-count with the g2s short wave (overshoot at f~0.5-0.7/k~2)
-recolor_xover = float(os.environ.get('EPSS_RECOLOR_XOVER', 0.45))
-# recolor the long wave to the directionally-complete direct amplitude (default on);
-# EPSS_RECOLOR_DIRECT=0 disables it (pure Krogstad long wave) for isolation tests
-recolor_direct = bool(int(os.environ.get('EPSS_RECOLOR_DIRECT', '1')))
+# disc [px] for the long-wave FOV-mean tilt (None = full frame)
+_sa = os.environ.get('EPSS_SLOPE_APERTURE', 'none')
+slope_aperture = None if str(_sa).strip().lower() in ('none', '') else int(_sa)
+# long-wave estimator: default 'fourier' (per-frequency slope projection); or 'wavelet'
+longwave_method = os.environ.get('EPSS_LONGWAVE', 'fourier')
+# post-hoc scalar-per-frequency recolor of EWDM S(f)/F(f,theta); corrects long+short
+# double-count and short-field scale offset. Leaves D(f,theta), F(k), F(k,theta) unchanged.
+# EPSS_RECOLOR_FC='none' disables (raw EWDM omni).
+_rf = os.environ.get('EPSS_RECOLOR_FC', '0.55')
+recolor_fc = None if str(_rf).strip().lower() in ('none', '') else float(_rf)
+_rb = os.environ.get('EPSS_RECOLOR_BAND', '0.5,0.6')
+recolor_band = tuple(float(x) for x in _rb.split(','))
 
 # fixed grids (dx constant: 2.915 m / 32 px)
 dx = DX_M
@@ -55,7 +57,9 @@ _DS = {}
 def _ds():
     if not _DS:
         _DS['fld'] = nc.Dataset(slope_field_file)
-        _DS['ref'] = nc.Dataset(path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+        # slope_field_file renumbered 0-189; ref matched by index for sftheta sign anchor
+        _DS['ref'] = nc.Dataset(os.environ.get(
+            'EPSS_REF', path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'))
     return _DS
 
 
@@ -65,26 +69,52 @@ def _ewmean(deg, w):
 
 
 def work(run_ind):
-    from multiaperture import (build_eta_field, default_apertures,
-                               multiaperture_spectra, sftheta_sign_anchor)
+    from multiaperture import (build_eta_field, sftheta_sign_anchor,
+                               anchored_freq_recolor)
+    from ewdm import MultiApertureArrays
+    from ewdm.multiaperture import default_apertures
     d = _ds()
     se = np.ma.filled(d['fld']['slope_east'][run_ind][..., :num_samples], np.nan)
     sn = np.ma.filled(d['fld']['slope_north'][run_ind][..., :num_samples], np.nan)
     if not np.isfinite(se).any():                        # NaN-flagged (corrupt) run
         return run_ind, None
-    # gated de-piston: build_eta_field also returns the solve field with the
-    # uniform long-wave piston removed above the depiston_n dispersion corner,
-    # so the FOV-scale |k| solve is not biased low
-    eta, _, eta_solve = build_eta_field(np.nan_to_num(se).astype(float),
+    # gated de-piston; returns solve field with long-wave piston removed above depiston_n corner
+    eta, _, eta_solve, eta_long, Zsw = build_eta_field(
+                                        np.nan_to_num(se).astype(float),
                                         np.nan_to_num(sn).astype(float),
                                         water_depth_m, fs,
-                                        krog_disc=krog_disc, depiston_n=depiston_n,
-                                        recolor_direct=recolor_direct,
-                                        recolor_crossover_f=recolor_xover)
-    M = multiaperture_spectra(eta, dx, freqs, k_grid, nu_grid, water_depth_m, fs,
-                              apertures=default_apertures(), n_staff=16,
-                              solve_eta=eta_solve,
-                              sign_anchor=sftheta_sign_anchor(d['ref'], run_ind))
+                                        slope_aperture=slope_aperture,
+                                        depiston_n=depiston_n,
+                                        return_components=True,
+                                        longwave_method=longwave_method)
+    # sign: 3-D-FFT sftheta anchor at matching index; no S_f_theta for strangers -> LH fallback (None)
+    is_str = ('is_stranger' in d['fld'].variables
+              and int(d['fld']['is_stranger'][run_ind]) == 1)
+    anchor = None if is_str else sftheta_sign_anchor(d['ref'], run_ind)
+    # fixed aperture ladder, no reliability gate, de-piston solve field
+    ds = MultiApertureArrays.from_field(eta, dx, water_depth_m, fs).compute(
+        freqs=freqs, k_grid=k_grid, nu_grid=nu_grid,
+        apertures=default_apertures(), n_staff=16, seed=20,
+        solve_eta=eta_solve, reliability_gate=None, sign_anchor=anchor)
+    # map ewdm dataset to M-dict convention; F(f,theta) per-rad->per-deg (main() reverses);
+    # F(k,theta) and Q(nu,theta) already per-radian, passed through unchanged
+    M = dict(Sf=np.asarray(ds['frequency_spectrum'].values, float),
+             Fk=np.asarray(ds['wavenumber_spectrum'].values, float),
+             Qn=np.asarray(ds['nu_spectrum'].values, float),
+             Fft=np.asarray(ds['directional_spectrum_f'].values, float) * (np.pi / 180.0),
+             Fkd=np.asarray(ds['directional_spectrum_k'].values, float),
+             Qnd=np.asarray(ds['directional_spectrum_nu'].values, float),
+             thbar=np.asarray(ds['mean_direction'].values, float),
+             sigma=np.asarray(ds['directional_spread'].values, float),
+             sign_ref=np.asarray(ds['sign_reference'].values, float),
+             theta=np.asarray(ds['direction'].values, float),
+             var_eta=float(ds['var_eta'].values))
+    # scalar-per-frequency recolor of S(f) and F(f,theta); leaves D(f,theta), F(k), Q(nu) unchanged
+    if recolor_fc is not None:
+        ratio, _R = anchored_freq_recolor(eta_long, Zsw, fs, freqs,
+                                          recolor_fc, recolor_band)
+        M['Sf'] = M['Sf'] * ratio
+        M['Fft'] = M['Fft'] * ratio[:, None]
     Fft, Fkd, Qnd = M['Fft'], M['Fkd'], M['Qnd']
     thbar, sigma, ref = M['thbar'], M['sigma'], M['sign_ref']
 
@@ -117,7 +147,8 @@ def main():
         futs = {ex.submit(work, r): r for r in range(num_runs)}
         done = 0
         for fu in as_completed(futs):
-            r, out = fu.result(); done += 1
+            r, out = fu.result()
+            done += 1
             if out is not None:
                 results[r] = out
             if done % 25 == 0:
@@ -125,37 +156,65 @@ def main():
 
     th = results[next(iter(results))]['theta']
     nf, nd, nk, nn = len(freqs), len(th), len(k_grid), len(nu_grid)
-    nan = lambda *s: np.full(s, np.nan, 'f4')
-    Fft = nan(nf, nd, num_runs); Fkd = nan(nk, nd, num_runs); Qnd = nan(nn, nd, num_runs)
-    Sf = nan(nf, num_runs); Fk = nan(nk, num_runs); Qn = nan(nn, num_runs)
-    Tb = nan(nf, num_runs); Sg = nan(nf, num_runs); Rf = nan(nf, num_runs); var = nan(num_runs)
-    for r, o in results.items():
-        Fft[:, :, r] = o['Fft']; Fkd[:, :, r] = o['Fkd']; Qnd[:, :, r] = o['Qnd']
-        Sf[:, r] = o['Sf']; Fk[:, r] = o['Fk']; Qn[:, r] = o['Qn']
-        Tb[:, r] = o['thbar']; Sg[:, r] = o['sigma']; Rf[:, r] = o['sign_ref']; var[r] = o['var_eta']
+    def nan_f4(*shape):
+        return np.full(shape, np.nan, 'f4')
 
-    # Dataset angular unit is radians (CW from true North). EWDM F(f,theta) is a
-    # per-degree density: rescale to per-radian so S_f = int F_f_d dtheta cleanly.
-    # F_k_d, Q_nu_d are already the Bjorkqvist (2019) jacobian-removed per-radian
-    # form (F_k = int k F_k_d dtheta, Q_nu = int nu Q_nu_d dtheta), so only their
-    # units labels change. Directional parameters convert deg -> rad.
+    Fft = nan_f4(nf, nd, num_runs)
+    Fkd = nan_f4(nk, nd, num_runs)
+    Qnd = nan_f4(nn, nd, num_runs)
+    Sf = nan_f4(nf, num_runs)
+    Fk = nan_f4(nk, num_runs)
+    Qn = nan_f4(nn, num_runs)
+    Tb = nan_f4(nf, num_runs)
+    Sg = nan_f4(nf, num_runs)
+    Rf = nan_f4(nf, num_runs)
+    var = nan_f4(num_runs)
+    for r, o in results.items():
+        Fft[:, :, r] = o['Fft']
+        Fkd[:, :, r] = o['Fkd']
+        Qnd[:, :, r] = o['Qnd']
+        Sf[:, r] = o['Sf']
+        Fk[:, r] = o['Fk']
+        Qn[:, r] = o['Qn']
+        Tb[:, r] = o['thbar']
+        Sg[:, r] = o['sigma']
+        Rf[:, r] = o['sign_ref']
+        var[r] = o['var_eta']
+
+    # direction -> radians CW from true North; F(f,theta) per-deg -> per-rad [m^2/Hz/rad];
+    # F_k_d, Q_nu_d already Bjorkqvist (2019) jacobian-removed per-radian form
     th = np.radians(th)
     Fft *= 180.0 / np.pi
     Tb, Sg, Rf = np.radians(Tb), np.radians(Sg), np.radians(Rf)
 
     out = nc.Dataset(output_file, 'w')
+    out.Conventions = 'CF-1.10'
+    out.title = 'ASIT 2019 E-PSS multi-aperture EWDM elevation directional wave spectra'
+    out.institution = 'University of New Hampshire'
+    out.source = ('ewdm.MultiApertureArrays multi-aperture wavelet directional method '
+                  'on virtual-staff arrays seeded into camera slope-derived elevation '
+                  'fields (build_eta_field: %s slope-projection long wave + g2s short '
+                  'wave, depiston_n=%g; apertures=default_apertures, reliability_gate=None)'
+                  % (longwave_method, depiston_n))
+    out.references = 'Laxague et al., E-PSS (in prep); Bjorkqvist et al. (2019)'
+    out.history = ('built by compute_all_directional_spectra.py; longwave_method=%s, '
+                   'depiston_n=%g, slope_aperture=%s'
+                   % (longwave_method, depiston_n, str(slope_aperture)))
     out.description = ('E-PSS multi-aperture elevation directional spectra; sign '
                        'resolved by S_f_theta 3-D-FFT anchor + onshore swell tiebreaker. '
                        'Direction in radians CW from true North. Polar k/nu directional '
                        'spectra are the Bjorkqvist et al. (2019) jacobian-removed form: '
                        'S_f = int F_f_d dtheta, F_k = int k F_k_d dtheta, '
                        'Q_nu = int nu Q_nu_d dtheta (theta in radians).')
-    out.createDimension('frequency', nf); out.createDimension('direction', nd)
-    out.createDimension('wavenumber', nk); out.createDimension('inverse_phase_speed', nn)
+    out.createDimension('frequency', nf)
+    out.createDimension('direction', nd)
+    out.createDimension('wavenumber', nk)
+    out.createDimension('inverse_phase_speed', nn)
     out.createDimension('run', num_runs)
 
     def V(name, dims, data, **att):
-        v = out.createVariable(name, 'f4', dims, zlib=True, complevel=4); v[:] = data
+        v = out.createVariable(name, 'f4', dims, zlib=True, complevel=4)
+        v[:] = data
         for k, vv in att.items():
             setattr(v, k, vv)
     V('frequency', ('frequency',), freqs, units='Hz')
@@ -172,8 +231,24 @@ def main():
     V('directional_spread', ('frequency', 'run'), Sg, units='radians')
     V('sign_reference', ('frequency', 'run'), Rf, units='radians clockwise from true North')
     V('variance', ('run',), var, units='m^2')
+    # provenance from renumbered 0-189 slope-field source
+    fld = nc.Dataset(slope_field_file)
+    if 'source_run_index' in fld.variables:
+        si = out.createVariable('source_run_index', 'i4', ('run',))
+        si[:] = fld['source_run_index'][:]
+        isv = out.createVariable('is_stranger', 'i1', ('run',))
+        isv[:] = fld['is_stranger'][:]
+        isv.flag_values = np.array([0, 1], 'i1')
+        isv.flag_meanings = 'archive stranger'
+        tv = out.createVariable('time', 'f8', ('run',))
+        tv[:] = fld['time'][:]
+        tv.standard_name = 'time'
+        tv.units = 'seconds since 1970-01-01 00:00:00'
+        tv.calendar = 'standard'
+        tv.axis = 'T'
+    fld.close()
     out.close()
-    print(f"Done. Wrote {output_file} ({len(results)} runs; 137-140 NaN-flagged).")
+    print(f"Done. Wrote {output_file} ({len(results)}/{num_runs} runs; renumbered 0-189).")
 
 
 if __name__ == '__main__':
