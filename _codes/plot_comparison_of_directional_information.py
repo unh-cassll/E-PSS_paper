@@ -10,12 +10,10 @@ from matplotlib import pyplot as plt
 
 import seaborn as sns
 
-from scipy import stats
-
 from eta_field_recon import lindisp_with_current
 from subroutines.utils import (figure_style, compute_mean_wave_direction_and_spreading,
-                               wind_speed_bins, write_tex_macros, ewdm_low_cutoff,
-                               NUM_RUNS, WATER_DEPTH_M)
+                               wind_speed_bins, binned_center_spread, write_tex_macros,
+                               ewdm_low_cutoff, NUM_RUNS, WATER_DEPTH_M)
 color_list,fullwidth,fullheight,fsize = figure_style()
 
 import warnings
@@ -255,20 +253,13 @@ U10_xlim = (U10_bin_centers[0] - dU/2, U10_bin_centers[-1] + dU/2)
 # ticks at every bin edge, out to and including xmax (so the last tick is labeled)
 U10_xticks = np.arange(U10_xlim[0], U10_xlim[1] + dU/2, dU)
 
-inds = ~np.isnan(MWD_diff)
-
-bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s[inds],MWD_diff[inds], statistic='mean', bins=U10_bin_edges)
-bin_std, _, _ = stats.binned_statistic(U10_m_s[inds],MWD_diff[inds], statistic='std', bins=U10_bin_edges)
-bin_counts, _, _ = stats.binned_statistic(U10_m_s[inds], MWD_diff[inds], statistic='count', bins=U10_bin_edges)
-
-# 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
-bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
-bin_upper = bin_means + bin_95CI
-bin_lower = bin_means - bin_95CI
+bin_medians, bin_mad, _, _ = binned_center_spread(U10_m_s, MWD_diff, U10_bin_edges)
+bin_upper = bin_medians + bin_mad
+bin_lower = bin_medians - bin_mad
 
 fig = plt.figure(figsize=(fullwidth/2,fullwidth/2))
 plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
-plt.plot(U10_bin_centers,bin_means,'-',color=color_list[2],linewidth=2,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
+plt.plot(U10_bin_centers,bin_medians,'-',color=color_list[2],linewidth=2,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
 plt.plot([0,16],[0,0],'--',color='gray')
 plt.xlim(*U10_xlim)
 plt.xticks(U10_xticks)
@@ -353,21 +344,13 @@ axs[0].grid(which='major', linestyle='-', linewidth=0.75)
 axs[0].grid(which='minor', linestyle=':', linewidth=0.75)
 
 for n in np.arange(2):
-    
-    values = SPREAD_peak[:,n]
-    inds = ~np.isnan(values)
 
-    bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s[inds],values[inds], statistic='mean', bins=U10_bin_edges)
-    bin_std, _, _ = stats.binned_statistic(U10_m_s[inds],values[inds], statistic='std', bins=U10_bin_edges)
-    bin_counts, _, _ = stats.binned_statistic(U10_m_s[inds], values[inds], statistic='count', bins=U10_bin_edges)
-
-    # 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
-    bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
-    bin_upper = bin_means + bin_95CI
-    bin_lower = bin_means - bin_95CI
+    bin_medians, bin_mad, _, _ = binned_center_spread(U10_m_s, SPREAD_peak[:,n], U10_bin_edges)
+    bin_upper = bin_medians + bin_mad
+    bin_lower = bin_medians - bin_mad
 
     axs[1].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[n], alpha=0.25)
-    axs[1].plot(U10_bin_centers,bin_means,'-',linewidth=2,label=labels[n])
+    axs[1].plot(U10_bin_centers,bin_medians,'-',linewidth=2,label=labels[n])
 
 
 axs[1].set_yticks(np.arange(0,360,15))

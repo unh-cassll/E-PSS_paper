@@ -37,7 +37,7 @@ from eta_field_recon import aperture_transfer_function as _aperture_transfer_fun
 __all__ = [
     'GRAV', 'L_FOV_M', 'N_PX', 'DX_M', 'WATER_DEPTH_M', 'FS_HZ', 'NUM_RUNS',
     'NUM_SAMPLES',
-    'figure_style', 'wind_speed_bins', 'write_tex_macros',
+    'figure_style', 'wind_speed_bins', 'binned_center_spread', 'write_tex_macros',
     'scatter_metrics', 'draw_metrics_box', 'ewdm_low_cutoff', 'epss_ewdm_grids',
     'mueller_calc_full', 'compute_gram_charlier_slope_pdf',
     'fit_gram_charlier_slope_pdf',
@@ -120,6 +120,35 @@ def wind_speed_bins(Umin=1.0, Umax=13.0, dU=2.0):
     centers = edges[:-1] + dU / 2
 
     return centers, edges, dU
+
+# %%
+
+# Robust binned aggregate: median center, MAD band, robust SE of the median.
+
+# N. Laxague 2026
+
+def binned_center_spread(x, values, bin_edges):
+    """Per bin: (median, MAD half-width for the shaded band, robust SE of the
+    median 1.4826*MAD/sqrt(N), count). Non-finite pairs are dropped; the last
+    bin includes its right edge."""
+    x = np.asarray(x, float)
+    values = np.asarray(values, float)
+    m = np.isfinite(x) & np.isfinite(values)
+    x, values = x[m], values[m]
+    nb = len(bin_edges) - 1
+    idx = np.digitize(x, bin_edges) - 1
+    idx[x == bin_edges[-1]] = nb - 1
+    mid = np.full(nb, np.nan)
+    mad = np.full(nb, np.nan)
+    counts = np.zeros(nb)
+    for i in range(nb):
+        v = values[idx == i]
+        counts[i] = v.size
+        if v.size:
+            mid[i] = np.median(v)
+            mad[i] = np.median(np.abs(v - mid[i]))
+    se = 1.4826 * mad / np.sqrt(np.maximum(counts, 1))
+    return mid, mad, se, counts
 
 # %%
 
