@@ -6,6 +6,8 @@ Created: 2025-11-15; refactored: 2026-05-29
 @author: nathanlaxague
 """
 
+import os
+
 import numpy as np
 import xarray as xr
 
@@ -21,7 +23,9 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
 
-output_file_name = '../_data/ASIT2019_omnidirectional_spectra.nc'
+# output overridable via env (write to temp -> verify -> swap)
+output_file_name = '../_data/' + os.environ.get('EPSS_OMNI_OUT',
+                                                 'ASIT2019_omnidirectional_spectra.nc')
 pathname = Path(output_file_name)
 
 if pathname.exists():
@@ -83,17 +87,30 @@ else:
                  for name in gain_names}
     data_vars['F_f_m2_Hz_lidar'] = (['frequency', 'run number'], F_f_m2_Hz_lidar)
 
+    # time coordinate carried from the supporting-env (0-189, chronological);
+    # omni is built by iterating that source in index order, so it aligns by index
+    src_time = np.asarray(ds_other['time'][:], 'f8')
+
     F_f_m2_Hz_all_ds = xr.Dataset(
         data_vars,
         coords={
             'frequency': f_Hz,
             'run number': run_number,
+            'time': (['run number'], src_time),
         },
-        attrs={'units': 'm^2/Hz'},
+        attrs={'units': 'm^2/Hz', 'Conventions': 'CF-1.10',
+               'title': 'ASIT 2019 omnidirectional elevation frequency spectra '
+                        '(E-PSS no/lab/empirical gain and Riegl lidar reference)',
+               'institution': 'University of New Hampshire',
+               'source': 'compute_all_omnidirectional_spectra.py; renumbered 0-189',
+               'history': 'omni F(f) from renumbered slope-timeseries + lidar'},
     )
 
     F_f_m2_Hz_all_ds['frequency'].attrs = {'units': 'Hz'}
-    F_f_m2_Hz_all_ds['run number'].attrs = {'units': 'sequential run number'}
+    F_f_m2_Hz_all_ds['run number'].attrs = {'units': 'sequential run number 0-189 (chronological)'}
+    F_f_m2_Hz_all_ds['time'].attrs = {'standard_name': 'time',
+                                      'units': 'seconds since 1970-01-01 00:00:00',
+                                      'calendar': 'standard', 'axis': 'T'}
 
     F_f_m2_Hz_all_ds.to_netcdf(output_file_name)
 

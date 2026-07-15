@@ -87,10 +87,10 @@ def work(run_ind):
                                         depiston_n=depiston_n,
                                         return_components=True,
                                         longwave_method=longwave_method)
-    # sign: 3-D-FFT sftheta anchor at matching index; no S_f_theta for strangers -> LH fallback (None)
-    is_str = ('is_stranger' in d['fld'].variables
-              and int(d['fld']['is_stranger'][run_ind]) == 1)
-    anchor = None if is_str else sftheta_sign_anchor(d['ref'], run_ind)
+    # sign: 3-D-FFT sftheta anchor at matching index; an empty S_f_theta record
+    # (run not present in the reference timeseries) -> LH fallback (None)
+    Sft_ref = np.nan_to_num(np.ma.filled(d['ref']['S_f_theta'][run_ind], 0.0))
+    anchor = sftheta_sign_anchor(d['ref'], run_ind) if Sft_ref.sum() > 0 else None
     # fixed aperture ladder, no reliability gate, de-piston solve field
     ds = MultiApertureArrays.from_field(eta, dx, water_depth_m, fs).compute(
         freqs=freqs, k_grid=k_grid, nu_grid=nu_grid,
@@ -231,15 +231,9 @@ def main():
     V('directional_spread', ('frequency', 'run'), Sg, units='radians')
     V('sign_reference', ('frequency', 'run'), Rf, units='radians clockwise from true North')
     V('variance', ('run',), var, units='m^2')
-    # provenance from renumbered 0-189 slope-field source
+    # time coordinate from the 0-189 chronological slope-field source
     fld = nc.Dataset(slope_field_file)
-    if 'source_run_index' in fld.variables:
-        si = out.createVariable('source_run_index', 'i4', ('run',))
-        si[:] = fld['source_run_index'][:]
-        isv = out.createVariable('is_stranger', 'i1', ('run',))
-        isv[:] = fld['is_stranger'][:]
-        isv.flag_values = np.array([0, 1], 'i1')
-        isv.flag_meanings = 'archive stranger'
+    if 'time' in fld.variables:
         tv = out.createVariable('time', 'f8', ('run',))
         tv[:] = fld['time'][:]
         tv.standard_name = 'time'
