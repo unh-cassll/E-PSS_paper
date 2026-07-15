@@ -14,3 +14,6 @@ seaborn
 # Arrays.compute()) are now merged into upstream main.
 ewdm @ git+https://github.com/dspelaez/extended-wdm.git
 epss @ git+https://github.com/unh-cassll/polarimetric-slope-sensing.git
+
+# slope/elevation spectra helpers; keeps `make install` from dropping it.
+slopespectra @ git+https://github.com/unh-cassll/wave-slope-spectral-analysis.git
