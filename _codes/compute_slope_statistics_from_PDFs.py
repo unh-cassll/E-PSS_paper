@@ -16,16 +16,20 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-output_file_name = '../_data/slope_statistics_dataset.nc'
-pathname = Path(output_file_name)
+import os
+# EPSS_STATS_SUFFIX: read timeseries_{gain}{SUFFIX}.nc and write
+# slope_statistics_dataset{SUFFIX}.nc (default '' = published/canonical)
+_SFX = os.environ.get('EPSS_STATS_SUFFIX', '')
 
 path = '../_data/'
+output_file_name = '../_data/slope_statistics_dataset%s.nc' % _SFX
+pathname = Path(output_file_name)
 
 # Inputs (including this script); recompute whenever any is newer than the output
 input_files = [
-    path + 'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc',
-    path + 'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc',
-    path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc',
+    path + 'ASIT2019_wave_spectra_stats_timeseries_no_gain%s.nc' % _SFX,
+    path + 'ASIT2019_wave_spectra_stats_timeseries_lab_gain%s.nc' % _SFX,
+    path + 'ASIT2019_wave_spectra_stats_timeseries_empirical_gain%s.nc' % _SFX,
     path + 'ASIT2019_supporting_environmental_observations.nc',
     __file__,
 ]
@@ -49,9 +53,9 @@ else:
 
     kappa = 0.4
     
-    ds_no = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc')
-    ds_lab = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc')
-    ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+    ds_no = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_no_gain%s.nc' % _SFX)
+    ds_lab = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_lab_gain%s.nc' % _SFX)
+    ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain%s.nc' % _SFX)
     
     ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
@@ -86,7 +90,10 @@ else:
     mss_long[:,:,0] = np.var(slope_crosswind_long,axis=1)
     mss_long[:,:,1] = np.var(slope_upwind_long,axis=1)
     
-    slope_centers = ds_no["slope_centers"][:]*-1
+    # GC fits in the histograms' native upwind-positive frame (the C&M/B&H
+    # sign convention; calibrated against the published third slope moments
+    # 2026-07-06 -- a *-1 flip here would negate c21/c03 vs those references)
+    slope_centers = ds_no["slope_centers"][:]
     slope_histogram_crosswind_upwind_no = ds_no["slope_histogram_crosswind_upwind"][:]
     slope_histogram_crosswind_upwind_lab = ds_lab["slope_histogram_crosswind_upwind"][:]
     slope_histogram_crosswind_upwind_emp = ds_emp["slope_histogram_crosswind_upwind"][:]

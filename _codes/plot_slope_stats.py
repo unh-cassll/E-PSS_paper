@@ -10,8 +10,6 @@ import netCDF4 as nc
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from scipy import stats
-
 from subroutines.utils import *
 color_list,fullwidth,fullheight,fsize = figure_style()
 
@@ -23,7 +21,12 @@ panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
 path = '../_data/'
 
-ds = nc.Dataset(path+'slope_statistics_dataset.nc')
+# EPSS_STATS_SUFFIX: read slope_statistics_dataset{SUFFIX}.nc and suffix the
+# output figure names (default '' = published/canonical)
+import os
+_SFX = os.environ.get('EPSS_STATS_SUFFIX', '')
+
+ds = nc.Dataset(path+'slope_statistics_dataset%s.nc' % _SFX)
 slope_stats_output_names = ['c21','c03','c40','c04','c22','R_squared','RMSE']
 
 ds_Elfouhaily = nc.Dataset(path+'Elfouhaily_et_al_1997_cumulative_mss.nc')
@@ -117,14 +120,9 @@ for i in np.arange(2):
         values = values[finite]
         U10_m_s = U10_m_s[finite]
 
-        bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s,values, statistic='mean', bins=U10_bin_edges)
-        bin_std, _, _ = stats.binned_statistic(U10_m_s,values, statistic='std', bins=U10_bin_edges)
-        bin_counts, _, _ = stats.binned_statistic(U10_m_s, values, statistic='count', bins=U10_bin_edges)
-
-        # 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
-        bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
-        bin_upper = bin_means + bin_95CI
-        bin_lower = bin_means - bin_95CI
+        bin_means, bin_spread, _, bin_counts = binned_center_spread(U10_m_s, values, U10_bin_edges)
+        bin_upper = bin_means + bin_spread
+        bin_lower = bin_means - bin_spread
 
         axs[1-i].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[j], alpha=0.25)
         axs[1-i].plot(U10_bin_centers,bin_means,'-',linewidth=2,label=dolp_gain_choices[j],markersize=10)
@@ -144,7 +142,7 @@ axs[1].legend(loc='upper left')
 
 plt.tight_layout()
 
-plt.savefig('../_figures/mss_upwind_crosswind.pdf',bbox_inches='tight')
+plt.savefig('../_figures/mss_upwind_crosswind%s.pdf' % _SFX,bbox_inches='tight')
 
 #%% Gram-Charlier coefficients from least-squares fits to slope PDFs
 
@@ -168,21 +166,17 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
         values = all_values[inds]
         U10_m_s = U10_m_s_all[inds]
 
-        bin_means, bin_edges, binnumber = stats.binned_statistic(U10_m_s,values, statistic='mean', bins=U10_bin_edges)
-        bin_std, _, _ = stats.binned_statistic(U10_m_s,values, statistic='std', bins=U10_bin_edges)
-        bin_counts, _, _ = stats.binned_statistic(U10_m_s, values, statistic='count', bins=U10_bin_edges)
-
-        # 95% CI on the bin mean: standard error is std/sqrt(N), not std/N
-        bin_95CI = 1.96*bin_std/np.sqrt(bin_counts)
-        bin_upper = bin_means + bin_95CI
-        bin_lower = bin_means - bin_95CI
+        bin_means, bin_spread, bin_se, bin_counts = binned_center_spread(U10_m_s, values, U10_bin_edges)
+        bin_upper = bin_means + bin_spread
+        bin_lower = bin_means - bin_spread
 
         env_lo = np.nanmin([env_lo, np.nanmin(bin_lower)])
         env_hi = np.nanmax([env_hi, np.nanmax(bin_upper)])
 
-        # Signal-to-noise of the empirical-gain bin means (flags unresolved coefficients)
+        # Signal-to-noise of the empirical-gain bin medians (flags unresolved
+        # coefficients) against the robust SE of the median
         if dolp_gain_choices[j] == 'empirical gain':
-            bin_SNR = np.abs(bin_means)/(bin_std/np.sqrt(bin_counts))
+            bin_SNR = np.abs(bin_means)/bin_se
 
         row_index, col_index = panel_positions[i]
 
@@ -235,12 +229,12 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
                 transform=axs[row_index,col_index].transAxes, fontsize=fsize,
                 ha='right', va='top', fontweight='bold', zorder=7)
         axs[row_index,col_index].annotate('B & H [2006]',
-            xy=(5, BH_slope_stats['c22'].values[0]), xytext=(6, -0.1),
+            xy=(5, BH_slope_stats['c22'].values[0]), xytext=(6, -0.05),
             ha='center', va='center', color='black', fontsize=fsize, zorder=7,
             arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))
     if varkey == 'c40':   # panel (c): C & M reference
         axs[row_index,col_index].annotate('C & M [1954]',
-            xy=(13, CM_slope_stats['c40'].values[0]), xytext=(11.8, 0.85),
+            xy=(13, CM_slope_stats['c40'].values[0]), xytext=(11.8, 0.7),
             ha='center', va='center', color='black', fontsize=fsize, zorder=7,
             arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))
 
@@ -251,12 +245,12 @@ axs[row_index,col_index].bar(U10_bin_centers,bin_counts,color='black',label='cou
 axs[row_index,col_index].set_ylabel('counts per bin')
 axs[row_index,col_index].set_xlim(*U10_xlim)
 axs[row_index,col_index].set_xticks(U10_xticks)
-axs[row_index,col_index].set_ylim(0,40)
+axs[row_index,col_index].set_ylim(0, 10*np.ceil(np.nanmax(bin_counts)*1.1/10))
 axs[row_index,col_index].set_xticks(np.arange(0,16,2))
 axs[row_index,col_index].text(0.05,0.95,panel_labels[2*row_index+col_index],fontsize=fsize,ha='center',va='center',transform=axs[row_index,col_index].transAxes)
     
 plt.tight_layout()
 
-plt.savefig('../_figures/slope_distribution_GC_coeffs.pdf',bbox_inches='tight')
+plt.savefig('../_figures/slope_distribution_GC_coeffs%s.pdf' % _SFX,bbox_inches='tight')
 
 # %%
