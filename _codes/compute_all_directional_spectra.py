@@ -27,7 +27,7 @@ slope_field_file = path + os.environ.get('EPSS_FLD', 'ASIT2019_slope_fields_redu
 output_file = path + os.environ.get('EPSS_OUT', 'ASIT2019_EPSS_directional_spectra.nc')
 fs, water_depth_m, num_samples, num_runs = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES, NUM_RUNS
 # de-piston corner k_n = 2*pi/(n*L); n=2.0 lifts the high-wind FOV-scale F(k) plateau
-depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 2.0))
+depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 1.5))
 # disc [px] for the long-wave FOV-mean tilt (None = full frame)
 _sa = os.environ.get('EPSS_SLOPE_APERTURE', 'none')
 slope_aperture = None if str(_sa).strip().lower() in ('none', '') else int(_sa)
