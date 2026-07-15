@@ -40,7 +40,10 @@ panel_labels = ['(a)','(b)','(c)','(d)']
 
 path = '../_data/'
 
-ds_emp = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+# EPSS_SLOPE_TS_FILE: direct-slope timeseries source (default empirical gain);
+# point at a *_recomputed.nc to render the figure from the new framework
+ds_emp = nc.Dataset(path+os.environ.get('EPSS_SLOPE_TS_FILE',
+                    'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'))
 
 ds_EWDM = xr.open_dataset(path+os.environ.get('EPSS_EWDM_FILE', 'ASIT2019_EPSS_directional_spectra.nc'))
 
@@ -169,9 +172,9 @@ fig, axs = plt.subplots(2, 2, figsize=(fullwidth, fullwidth))
 # Panel spec: (axis, x-grid, Y(nbins,nx), boundary, is_ewdm, low_bound, high_bound)
 panels = [
     (axs[0,0], f_ewdm, F_f_ewdm_binned, f_bound, True, f_low, f_high),
-    (axs[0,0], f_Hz_slope, F_f_slope_binned, f_bound, False, None, f_high),
+    (axs[0,0], f_Hz_slope[0:-2], F_f_slope_binned[:,0:-2], f_bound, False, None, f_high),
     (axs[1,0], f_ewdm, B_f_ewdm_binned, f_bound, True, f_low, f_high),
-    (axs[1,0], f_Hz_slope, B_f_slope_binned, f_bound, False, None, f_high),
+    (axs[1,0], f_Hz_slope[0:-2], B_f_slope_binned[:,0:-2], f_bound, False, None, f_high),
     (axs[0,1], k_ewdm, F_k_ewdm_binned, k_bound, True, k_low, None),
     (axs[0,1], k_rad_m_slope, F_k_slope_binned, k_bound, False, None, None),
     (axs[1,1], k_ewdm, B_k_ewdm_binned, k_bound, True, k_low, None),
