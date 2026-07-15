@@ -3,7 +3,6 @@
 all: figures
 
 figures: aperture_field_stitch \
-	binned_directional_spreading \
 	binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
@@ -13,7 +12,6 @@ figures: aperture_field_stitch \
 	longwave_shortwave_demo \
 	mueller_calc \
 	slope_elev_timeseries_and_spectra \
-	slope_PDFs \
 	slope_stats \
 	Tm02_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
@@ -21,10 +19,6 @@ figures: aperture_field_stitch \
 aperture_field_stitch: plot_aperture_field_stitch.py
 	@python3 plot_aperture_field_stitch.py
 	@echo "saved aperture_field_stitch.pdf to file"
-
-binned_directional_spreading: plot_binned_directional_spreading.py
-	@python3 plot_binned_directional_spreading.py
-	@echo "saved directional_spreading_binned_by_wind.pdf to file"
 
 longwave_shortwave_demo: plot_longwave_shortwave_demo.py
 	@python3 plot_longwave_shortwave_demo.py
@@ -65,10 +59,6 @@ mueller_calc: plot_mueller_calc.py
 slope_elev_timeseries_and_spectra: plot_slope_elev_timeseries_and_spectra.py
 	@python3 plot_slope_elev_timeseries_and_spectra.py
 	@echo "saved elevation_omnispect.pdf to file"
-
-slope_PDFs: plot_slope_PDFs.py
-	@python3 plot_slope_PDFs.py
-	@echo "saved slope_distributions_binned_by_wind.pdf to file"
 
 slope_stats: plot_slope_stats.py
 	@python3 plot_slope_stats.py
