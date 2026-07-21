@@ -69,13 +69,13 @@ smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_low = 0.03
-f_cut_high = 0.4
+f_cut_low = 0.08
+f_cut_high = 0.3
 f_cut_high_EPSS = 0.7          # E-PSS directional spreading trusted to higher f than MWD/Tm01
 
 # trusted band for sigma_theta(f): faded below f_low (EWDM low-scale cutoff);
 # ADCP solid only to f_ADCP_trust_high [Hz], E-PSS solid above
-f_ADCP_trust_high = 0.25
+f_ADCP_trust_high = 0.3
 _, f_low = ewdm_low_cutoff()
 alpha_faded = 0.30             # opacity of each estimate beyond its trusted band
 
