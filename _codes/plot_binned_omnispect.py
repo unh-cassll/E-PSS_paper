@@ -76,7 +76,7 @@ F_k_ewdm = ds_EWDM['F_k'].values       # (wavenumber, run)
 
 # EWDM/direct boundary: f_bound set below by level match in [0.30, 0.50] Hz (<=0.6 Hz fallback).
 # f_high: gravity-band ceiling; EWDM tail faded only through f_high in the frequency column.
-k_bound = k_rad_m_slope[0]
+k_bound = k_rad_m_slope[0]*0.8
 f_high = 1.0
 
 # Low-scale EWDM trust cutoff; fade the EWDM below it
@@ -227,14 +227,14 @@ for ax, x, Y, bound, is_ewdm, low_bound, high_bound in panels:
 # Saturation reference lines (Bjorkqvist et al. 2019): f^-5 / k^-3 slopes,
 # universal constants alpha_f=2.5e-2*2*pi [rad], alpha_k=5.8e-3 [rad].
 alpha_f, alpha_k = 2.5e-2*2*np.pi, 5.8e-3
-# axs[0,0].loglog(f_eq_lims,1e-2*np.power(f_eq_lims,-4),'--',color='red',linewidth=lw_thin)
-axs[0,0].loglog(f_sat_lims,alpha_f*g**2/np.power(2*np.pi,5)*np.power(f_sat_lims,-5),'--',color='red',linewidth=lw_thick)
-# axs[1,0].loglog(f_eq_lims,4e-2*np.power(f_eq_lims,1),'--',color='red',linewidth=lw_thin)
-axs[1,0].loglog(f_sat_lims,alpha_f*np.power(f_sat_lims,0),'--',color='red',linewidth=lw_thick)
-# axs[0,1].loglog(k_eq_lims,5e-2*np.power(k_eq_lims,-2.5),'--',color='red',linewidth=lw_thin)
-axs[0,1].loglog(k_sat_lims,alpha_k*np.power(k_sat_lims,-3),'--',color='red',linewidth=lw_thick)
-# axs[1,1].loglog(k_eq_lims,2e-2*np.power(k_eq_lims,0.5),'--',color='red',linewidth=lw_thin)
-axs[1,1].loglog(k_sat_lims,alpha_k*np.power(k_sat_lims,0),'--',color='red',linewidth=lw_thick)
+axs[0,0].loglog(f_eq_lims,5e-3*np.power(f_eq_lims,-4),'--',color='red',linewidth=lw_thin)
+axs[0,0].loglog(f_sat_lims,alpha_f*g**2/np.power(2*np.pi,5)*np.power(f_sat_lims,-5),':',color='red',linewidth=lw_thick)
+axs[1,0].loglog(f_eq_lims,2e-1*np.power(f_eq_lims,1),'--',color='red',linewidth=lw_thin)
+axs[1,0].loglog(f_sat_lims,alpha_f*np.power(f_sat_lims,0),':',color='red',linewidth=lw_thick)
+axs[0,1].loglog(k_eq_lims,1e-2*np.power(k_eq_lims,-2.5),'--',color='red',linewidth=lw_thin)
+axs[0,1].loglog(k_sat_lims,alpha_k*np.power(k_sat_lims,-3),':',color='red',linewidth=lw_thick)
+axs[1,1].loglog(k_eq_lims,1e-2*np.power(k_eq_lims,0.5),'--',color='red',linewidth=lw_thin)
+axs[1,1].loglog(k_sat_lims,alpha_k*np.power(k_sat_lims,0),':',color='red',linewidth=lw_thick)
 
 # Axis labels and limits
 axs[0,0].set(xlim=f_lims, ylim=Ff_lims, ylabel=r'F(f) [m$^2$Hz$^{-1}$]')
@@ -244,6 +244,12 @@ axs[1,1].set(xlim=k_lims, ylim=Bk_lims, ylabel=r'k$^3$F(k) [rad]', xlabel=r'k [r
 
 axs[0,0].set_xticklabels([])
 axs[0,1].set_xticklabels([])
+
+for ax in axs[:, 1]:
+    ax.yaxis.tick_right()
+    ax.yaxis.set_label_position("right")
+    ax.spines["right"].set_position(("outward", 0))
+
 
 counter = 0
 bound_per_col = [f_bound, k_bound]
