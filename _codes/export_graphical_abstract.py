@@ -7,8 +7,10 @@ Created: 2026-03-01
 
 from drawsvg import Drawing
 
-input_file = '../_figures/e-pss_graphical_abstract.svg'
-output_file = '../_figures/e-pss_graphical_abstract.pdf'
+figpath = '../_figures/'
+
+input_file = figpath + 'e-pss_graphical_abstract.svg'
+output_file = figpath + 'e-pss_graphical_abstract.pdf'
 
 d = Drawing(filename=input_file)
 d.saveas(output_file)

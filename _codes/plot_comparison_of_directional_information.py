@@ -23,6 +23,7 @@ warnings.filterwarnings("ignore")
 panel_labels = ['(a)','(b)']
 
 path = '../_data/'
+figpath = '../_figures/'
 
 ds_other = nc.Dataset(path+'ASIT2019_supporting_environmental_observations.nc')
     
@@ -269,7 +270,7 @@ plt.ylim(-45,45)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
 
-plt.savefig('../_figures/delta_theta_nought.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'delta_theta_nought.pdf',bbox_inches='tight')
 
 
 # %%
@@ -366,7 +367,7 @@ for n in np.arange(2):
     
     axs[n].text(0.05,0.95,panel_labels[n],fontsize=fsize,ha='center',va='center',transform=axs[n].transAxes)
     
-plt.savefig('../_figures/directional_spreading_comparison.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'directional_spreading_comparison.pdf',bbox_inches='tight')
 
 
 

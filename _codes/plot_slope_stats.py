@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore")
 panel_labels = ['(a)','(b)','(c)','(d)','(e)','(f)']
 
 path = '../_data/'
+figpath = '../_figures/'
 
 # EPSS_STATS_SUFFIX: read slope_statistics_dataset{SUFFIX}.nc and suffix the
 # output figure names (default '' = published/canonical)
@@ -142,7 +143,7 @@ axs[1].legend(loc='upper left')
 
 plt.tight_layout()
 
-plt.savefig('../_figures/mss_upwind_crosswind%s.pdf' % _SFX,bbox_inches='tight')
+plt.savefig(figpath + 'mss_upwind_crosswind%s.pdf' % _SFX,bbox_inches='tight')
 
 #%% Gram-Charlier coefficients from least-squares fits to slope PDFs
 
@@ -251,6 +252,6 @@ axs[row_index,col_index].text(0.05,0.95,panel_labels[2*row_index+col_index],font
     
 plt.tight_layout()
 
-plt.savefig('../_figures/slope_distribution_GC_coeffs%s.pdf' % _SFX,bbox_inches='tight')
+plt.savefig(figpath + 'slope_distribution_GC_coeffs%s.pdf' % _SFX,bbox_inches='tight')
 
 # %%

@@ -39,6 +39,7 @@ def band_average(A, n=5):
 panel_labels = ['(a)','(b)','(c)','(d)']
 
 path = '../_data/'
+figpath = '../_figures/'
 
 # EPSS_SLOPE_TS_FILE: direct-slope timeseries source (default empirical gain);
 # point at a *_recomputed.nc to render the figure from the new framework
@@ -272,4 +273,4 @@ cbar = fig.colorbar(sm, ax=axs, location='top', orientation='horizontal', fracti
 cbar.set_label(r'U$_{10}$ [m s$^{-1}$]')
 
 _omni_fig = os.environ.get('EPSS_OMNI_FIGNAME', 'omnidirectional_spectra_binned_by_wind')
-plt.savefig('../_figures/%s.pdf' % _omni_fig, bbox_inches='tight')
+plt.savefig(figpath + '%s.pdf' % _omni_fig, bbox_inches='tight')

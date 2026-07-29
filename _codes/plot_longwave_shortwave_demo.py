@@ -17,6 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
+figpath = '../_figures/'
 fs = FS_HZ
 depth = WATER_DEPTH_M
 run_ind = 180         # ~1 m Hs run; inferred long wave is in phase with the lidar here
@@ -107,4 +108,4 @@ cb = fig.colorbar(im, ax=ax2, orientation='horizontal', location='top', fraction
 cb.set_label(r'short wave $\eta$ [m], t = %.0f s' % t_snap)
 panel_tag(ax2, '(c)')
 
-plt.savefig('../_figures/longwave_shortwave_demo_stacked.pdf', bbox_inches='tight', dpi=300)
+plt.savefig(figpath + 'longwave_shortwave_demo_stacked.pdf', bbox_inches='tight', dpi=300)

@@ -18,6 +18,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
+figpath = '../_figures/'
 
 f_lp = 0.7    # Hz; jinc-corrected single disc is valid to ~lambda=FOV (2.915 m -> ~0.7 Hz)
 f_hp = 0.10   # Hz; above the 1/k^2-amplified low-f noise bump that inflates the period
@@ -97,4 +98,4 @@ plt.ylabel(r'$T_{m02}$, E-PSS [s]')
 
 sns.despine(right=False,top=False)
 
-plt.savefig('../_figures/Tm02_comparison_lidar_epss.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'Tm02_comparison_lidar_epss.pdf',bbox_inches='tight')

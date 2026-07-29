@@ -35,6 +35,7 @@ warnings.filterwarnings("ignore")
 g = 9.81;
 
 path = '../_data/'
+figpath = '../_figures/'
 
 fn = path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc'
 ds = nc.Dataset(fn)
@@ -164,7 +165,7 @@ ax2.text(0.05,0.95,'(b)',color='black',fontsize=fsize,ha='center',va='center',tr
 for ax in (ax1, ax2):
     [c.set_rasterized(True) for c in ax.collections]
 
-plt.savefig('../_figures/directional_spectra_polar.pdf',bbox_inches='tight',dpi=300)
+plt.savefig(figpath + 'directional_spectra_polar.pdf',bbox_inches='tight',dpi=300)
 
 # %%
 # Directional wave spectra (Cartesian grid)
@@ -211,6 +212,6 @@ ax2.set(title="EWDM, E-PSS")
 cbar = fig.colorbar(pc2)
 cbar.set_label(r'$D(f,\theta)$')
 
-plt.savefig('../_figures/directional_spectra_combined.pdf',bbox_inches='tight',dpi=300)
+plt.savefig(figpath + 'directional_spectra_combined.pdf',bbox_inches='tight',dpi=300)
 
 

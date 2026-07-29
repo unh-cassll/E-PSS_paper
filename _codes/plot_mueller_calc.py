@@ -17,6 +17,8 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+figpath = '../_figures/'
+
 n = 1.33
 
 Ssky = np.float64([1,0,0,0])
@@ -111,5 +113,5 @@ for i, ax in enumerate(axs):
 
 plt.tight_layout()
 
-plt.savefig('../_figures/mueller_calc_example.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'mueller_calc_example.pdf',bbox_inches='tight')
 

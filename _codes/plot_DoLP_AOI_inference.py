@@ -29,6 +29,7 @@ warnings.filterwarnings("ignore")
 panel_labels = ['(a)','(b)','(c)','(d)']
 
 path = '../_data/'
+figpath = '../_figures/'
 
 N_WATER = 1.33               # matches the ideal-Fresnel curve drawn in the top row
 LAB_GAIN = 1.0/0.81          # fixed lab-calibrated DoLP gain (Piermont campaign value)
@@ -191,5 +192,5 @@ for i, ax in enumerate(axs.ravel()):
 
 plt.tight_layout()
 
-plt.savefig('../_figures/DoLP_AOI_inference.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'DoLP_AOI_inference.pdf',bbox_inches='tight')
 print('saved ../_figures/DoLP_AOI_inference.pdf')

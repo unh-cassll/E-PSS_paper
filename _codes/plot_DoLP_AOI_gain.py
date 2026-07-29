@@ -20,6 +20,8 @@ import warnings
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
+figpath = '../_figures/'
+
 fn = '../_data/Run051_example_Stokes_parameters.nc'
 
 ds_Stokes = nc.Dataset(fn)
@@ -102,4 +104,4 @@ ax3.text(25, 45, 'emp. gain',
 cbar = fig.colorbar(pc_emp, ax=[ax2, ax3], orientation='vertical', fraction=0.02, pad=0.04)
 cbar.set_label('DoLP')
 
-plt.savefig('../_figures/DoLP_AOI_gain_example.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'DoLP_AOI_gain_example.pdf',bbox_inches='tight')

@@ -18,6 +18,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
+figpath = '../_figures/'
 
 f_lp = 0.5    # Hz; jinc-corrected single disc is valid to ~lambda=FOV (2.915 m -> ~0.7 Hz)
 f_hp = 0.08   # Hz; lower admits 1/k^2-amplified low-f noise
@@ -87,4 +88,4 @@ plt.ylabel(r'$H_{m0}$, E-PSS [m]')
 
 sns.despine(right=False,top=False)
 
-plt.savefig('../_figures/Hm0_comparison_lidar_epss.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'Hm0_comparison_lidar_epss.pdf',bbox_inches='tight')

@@ -21,6 +21,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
+figpath = '../_figures/'
 
 ds_no = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_no_gain.nc')
 ds_lab = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_lab_gain.nc')
@@ -86,4 +87,4 @@ plt.ylabel(r'$F_{\eta\eta}(f)$ [m$^2$Hz$^{-1}$]')
 
 plt.legend(loc='lower left')
 
-plt.savefig('../_figures/elevation_omnispect.pdf',bbox_inches='tight')
+plt.savefig(figpath + 'elevation_omnispect.pdf',bbox_inches='tight')

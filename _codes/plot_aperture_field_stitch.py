@@ -27,6 +27,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 path = '../_data/'
+figpath = '../_figures/'
 fs, depth, num_samples = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES
 dx = DX_M
 runs = [60, 95, 130, 165]              # ensemble for the per-aperture + stitched spectra
@@ -182,4 +183,4 @@ sp = ax.get_position()
 fig.set_layout_engine('none')
 ax.set_position([sp.x0, quad_bot, sp.width, quad_top - quad_bot])
 
-plt.savefig('../_figures/aperture_field_stitch.pdf', bbox_inches='tight', dpi=300)
+plt.savefig(figpath + 'aperture_field_stitch.pdf', bbox_inches='tight', dpi=300)
