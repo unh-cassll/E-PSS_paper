@@ -152,8 +152,8 @@ plot_directional_spectrum(
     cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
     curspd=U10[run_ind], curdir=90 - (winddir[run_ind] + 180),   # point downwind (curdir path -> red arrow; lib wind arrow is hardcoded black)
 )
-_ = ax1.set(xlabel="", ylabel="", title="MEM, ADCP")
-_ = ax2.set(xlabel="", ylabel="", title="EWDM, E-PSS")
+_ = ax1.set(xlabel="", ylabel="", title="MEM (ADCP)")
+_ = ax2.set(xlabel="", ylabel="", title="EWDM Arrays (E-PSS)")
 
 ax1.grid(False)
 ax2.grid(False)
@@ -187,30 +187,31 @@ inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high
 
 pc1 = ax1.pcolormesh(theta_deg_ADCP,f_Hz_ADCP[inds_keep],D_ADCP[inds_keep,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax1.pcolor(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
-ax1.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
+ax1.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='#00E5FF',ls=':',lw=1.5,label='wind direction')
 ax1.set_yscale('log')
 ax1.set_xticks(np.arange(-360,360,45))
 ax1.set_xlim(-180,180)
-ax1.set_ylim(1e-2,2e1)
+ax1.set_ylim(5e-2,2e1)
 ax1.set_xlabel(r'$\theta$ [$\circ$]')
 ax1.set_ylabel('f [Hz]')
 ax1.text(0.93,0.90,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
-ax1.set(title="MEM, ADCP")
+ax1.set(title="MEM (ADCP)")
 
 pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax2.pcolormesh(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
-ax2.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='red',label='wind direction')
+ax2.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='#00E5FF',ls=':',lw=1.5,label='wind direction')
 ax2.set_yscale('log')
 ax2.set_xticks(np.arange(-360,360,45))
 ax2.set_xlim(-180,180)
-ax2.set_ylim(1e-2,2e1)
+ax2.set_ylim(5e-2,2e1)
 ax2.set_xlabel(r'$\theta$ [$\circ$]')
 ax2.set_yticklabels([])
 ax2.text(0.93,0.90,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
-ax2.set(title="EWDM, E-PSS")
+ax2.set(title="EWDM Arrays (E-PSS)")
 
-cbar = fig.colorbar(pc2)
-cbar.set_label(r'$D(f,\theta)$')
+cb = fig.colorbar(pc2,ax=ax2,location='right',shrink=0.85,
+                  aspect=24,pad=0.02)
+cb.set_label(r'$D(f,\theta)\;\mathrm{[deg^{-1}]}$',fontsize=fsize)
 
 plt.savefig(figpath + 'directional_spectra_combined.pdf',bbox_inches='tight',dpi=300)
 
