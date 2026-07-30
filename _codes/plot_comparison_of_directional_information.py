@@ -1,5 +1,5 @@
-# Plot comparison of directional wave information (MWD and directional spreading)
-# between ADCP (MEM) and E-PSS (EWDM) estimates. Binned by U10.
+# Compare mean wave direction and directional spreading sigma_theta(f) across six
+# E-PSS directional estimators against the ADCP (IMLM) reference. Binned by U10.
 # @author: nathanlaxague
 
 import numpy as np
@@ -13,14 +13,37 @@ import seaborn as sns
 from eta_field_recon import lindisp_with_current
 from subroutines.utils import (figure_style, compute_mean_wave_direction_and_spreading,
                                wind_speed_bins, binned_center_spread, write_tex_macros,
-                               ewdm_low_cutoff, NUM_RUNS, WATER_DEPTH_M)
-color_list,fullwidth,fullheight,fsize = figure_style()
+                               ewdm_low_cutoff, lobe_sigma, NUM_RUNS, WATER_DEPTH_M,
+                               SPREAD_SMOOTHNUM, SPREAD_SMOOTHNUM_DIRECT)
+project_colors,fullwidth,fullheight,fsize = figure_style()
+
+# curve palette: black for the ADCP reference, then the project palette shared
+# with plot_DoLP_AOI_inference, reordered onto the estimator roster below.
+color_list = ['k',
+              project_colors[2],        # EWDM Arrays, rust
+              project_colors[4],        # EWDM Triplet, cerulean
+              project_colors[0],        # IMLM, violet
+              project_colors[3],        # EMEP, golden
+              project_colors[1]]        # BDM, teal
 
 import warnings
 
 warnings.filterwarnings("ignore")
 
 panel_labels = ['(a)','(b)']
+
+# Estimator roster: F_f_d variable suffix -> legend label; '' is the base EWDM
+# LSQ product. ADCP takes color 0 (black), estimators 1-5. Black is skipped in
+# delta_theta_nought, where the ADCP is the reference rather than a curve.
+# Order follows the panels of directional_spreading_panels, IMLM leading the
+# traditional estimators as the one matching the ADCP's own inversion. Index 0
+# must stay the base product: it is what the exported .tex macros summarize.
+estimators = [('',              'EWDM Arrays'),
+              ('_EWDM_triplet', 'EWDM Triplet'),
+              ('_IMLM',         'IMLM'),
+              ('_EMEP',         'EMEP'),
+              ('_BDM',          'BDM')]
+n_est = len(estimators)
 
 path = '../_data/'
 figpath = '../_figures/'
@@ -64,13 +87,17 @@ ind_peak_EPSS = ind_peak_ADCP.copy()
 SPREAD_ADCP = np.nan*np.ones((num_runs,len(f_Hz_ADCP)))
 SPREAD_EPSS = np.nan*np.ones((num_runs,num_f))
 
+# per-estimator MWD and sigma_theta(f); index 0 (EWDM LSQ) feeds the macros
+MWD_EST = np.nan*np.ones((n_est,num_runs))
+SPREAD_EST = np.nan*np.ones((n_est,num_runs,num_f))
+
 Ff_EPSS = np.nan*np.ones((num_runs,num_f))
 
 smoothnum = 5
 
 theta_halfwidth = 120
 
-f_cut_low = 0.08
+f_cut_low = 0.05
 f_cut_high = 0.3
 f_cut_high_EPSS = 0.7          # E-PSS directional spreading trusted to higher f than MWD/Tm01
 
@@ -80,61 +107,22 @@ f_ADCP_trust_high = 0.3
 _, f_low = ewdm_low_cutoff()
 alpha_faded = 0.30             # opacity of each estimate beyond its trusted band
 
-# f_m02 = sqrt(m2/m0) over [F_HP, F_LP] [Hz]; matches Tm02 figure band
+# f_p over [F_HP, F_LP] [Hz] after Young (1995): int f E^q df / int E^q df. The
+# E^q weighting concentrates the integral near the spectral maximum, so this is a
+# peak frequency that does not depend on which single bin happens to be highest.
+# Same band as the Tp figure.
 F_HP, F_LP = 0.10, 0.7
-def f_m02_of(freq, Sf):
+PEAK_Q = 4
+def f_p_of(freq, Sf, q=PEAK_Q):
     freq = np.asarray(freq, float)
     Sf = np.asarray(Sf, float)
     sh = (-1,) + (1,)*(Sf.ndim-1)
     band = ((freq >= F_HP) & (freq <= F_LP)).astype(float).reshape(sh)
-    f2 = (freq**2).reshape(sh)
-    return np.sqrt(np.nansum(band*f2*Sf, axis=0)/np.nansum(band*Sf, axis=0))
-f_m02 = f_m02_of(f_Hz_omni, F_f_m2_Hz_omni)
-
-SIGMA_HALFWIDTH = 90.0   # single-lobe sigma_theta window half-width [deg]; +-90 excludes the direct mirror lobe
-
-
-def _smooth5(x, n=smoothnum):
-    # centered n-point rolling median (NaN-aware, edge-shrinking) over the scale axis
-    x = np.asarray(x, float)
-    m = len(x)
-    out = x.copy()
-    for i in range(m):
-        w = x[max(0, i-n//2):min(m, i+n//2+1)]
-        w = w[np.isfinite(w)]
-        if w.size:
-            out[i] = np.median(w)
-    return out
-
-
-def lobe_spread(dirs_deg, dens, halfwidth=SIGMA_HALFWIDTH):
-    # single-lobe RMS directional spread sigma_theta(scale); +-halfwidth deg isolates dominant lobe
-    th = np.radians(np.asarray(dirs_deg))
-    E = np.nan_to_num(dens)
-    nsc = E.shape[0]
-    sig = np.full(nsc, np.nan)
-    h = np.radians(halfwidth)
-    for j in range(nsc):
-        D = E[j]
-        s = D.sum()
-        if s <= 0:
-            continue
-        a = (D*np.cos(th)).sum()
-        b = (D*np.sin(th)).sum()
-        d = np.angle(np.exp(1j*(th - np.arctan2(b, a))))
-        Dk = D*(np.abs(d) <= h)
-        sk = Dk.sum()
-        if sk <= 0:
-            continue
-        thc = np.arctan2((Dk*np.sin(th)).sum(), (Dk*np.cos(th)).sum())
-        d2 = np.angle(np.exp(1j*(th - thc)))
-        sig[j] = np.degrees(np.sqrt((Dk*d2**2).sum()/sk))
-    return sig
-
-
-def lobe_sigma(F):
-    # single-lobe sigma_theta(scale) from xarray (scale, direction) [deg direction coord]; smoothed
-    return _smooth5(lobe_spread(F['direction'].data, np.nan_to_num(F.data)))
+    E = np.nan_to_num(band*Sf)**q
+    num = np.nansum(freq.reshape(sh)*E, axis=0)
+    den = np.nansum(E, axis=0)
+    return np.where(den > 0, num/np.where(den > 0, den, 1.0), np.nan)
+f_p = f_p_of(f_Hz_omni, F_f_m2_Hz_omni)
 
 
 for run_ind in np.arange(0,num_runs):
@@ -156,8 +144,11 @@ for run_ind in np.arange(0,num_runs):
     )
     
     F_ADCP = dataset_ADCP.F_ADCP
-    Ff_ADCP = F_ADCP.integrate('direction')
-    
+    # untruncated omnidirectional spectrum, kept for f_p alone: f_p is defined
+    # over [F_HP, F_LP], which reaches past the f_cut_high applied to F_ADCP
+    # below. Tm01 stays on the truncated band, matching the E-PSS side.
+    Ff_ADCP_full = F_ADCP.integrate('direction').data
+
     F_EPSS = ds_EPSS_spect['F_f_d'][:,:,run_ind]
     
     f_EPSS = F_EPSS['frequency'].data
@@ -172,22 +163,28 @@ for run_ind in np.arange(0,num_runs):
     F_ADCP_spread.data[F_ADCP_spread["frequency"].data > f_cut_high,:] = 0
 
     F_ADCP.data[inds_exclude,:] = 0
+    Ff_ADCP = F_ADCP.integrate('direction').data
 
     inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
     F_EPSS.data[inds_exclude,:] = 0
 
-    # MWD over ADCP-trusted band [f_cut_low, f_ADCP_trust_high]; direction deg CW-from-N
-    F_EPSS_mwd = F_EPSS.copy(deep=True)
-    F_EPSS_mwd.data[F_EPSS_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
-    mwd_EPSS, _ = compute_mean_wave_direction_and_spreading(F_EPSS_mwd,theta_halfwidth,smoothnum)
-    MWD_EPSS[run_ind] = mwd_EPSS
+    # per estimator: MWD over [f_cut_low, f_ADCP_trust_high] (deg CW-from-N),
+    # sigma_theta(f) over [f_cut_low, f_cut_high_EPSS]
+    for n, (suffix, _lab) in enumerate(estimators):
+        Fe = ds_EPSS_spect['F_f_d'+suffix][:,:,run_ind].copy(deep=True)
+        fe = Fe["frequency"].data
+        Fe.data[(fe > f_cut_high) | (fe < f_cut_low),:] = 0
+        Fe_mwd = Fe.copy(deep=True)
+        Fe_mwd.data[fe > f_ADCP_trust_high,:] = 0
+        MWD_EST[n,run_ind], _ = compute_mean_wave_direction_and_spreading(
+            Fe_mwd,theta_halfwidth,smoothnum)
 
-    # sigma_theta(f) on extended band [f_cut_low, f_cut_high_EPSS]
-    F_EPSS_spread = ds_EPSS_spect['F_f_d'][:,:,run_ind].copy(deep=True)
-    inds_exclude_spread = (F_EPSS_spread["frequency"].data > f_cut_high_EPSS) | (F_EPSS_spread["frequency"].data < f_cut_low)
-    F_EPSS_spread.data[inds_exclude_spread,:] = 0
-    spread_EPSS = lobe_sigma(F_EPSS_spread)          # single-lobe (estimator-fair vs ADCP)
-    SPREAD_EPSS[run_ind,:] = spread_EPSS
+        Fe_spread = ds_EPSS_spect['F_f_d'+suffix][:,:,run_ind].copy(deep=True)
+        Fe_spread.data[(fe > f_cut_high_EPSS) | (fe < f_cut_low),:] = 0
+        SPREAD_EST[n,run_ind,:] = lobe_sigma(Fe_spread, smooth=smoothnum)   # single-lobe (estimator-fair vs ADCP)
+
+    MWD_EPSS[run_ind] = MWD_EST[0,run_ind]
+    SPREAD_EPSS[run_ind,:] = SPREAD_EST[0,run_ind,:]
     
     total_energy = F_ADCP.integrate('frequency').integrate('direction')
     
@@ -195,11 +192,10 @@ for run_ind in np.arange(0,num_runs):
         F_ADCP_mwd = F_ADCP.copy(deep=True)
         F_ADCP_mwd.data[F_ADCP_mwd["frequency"].data > f_ADCP_trust_high,:] = 0
         mwd_ADCP, _ = compute_mean_wave_direction_and_spreading(F_ADCP_mwd,theta_halfwidth,smoothnum)
-        spread_ADCP = lobe_sigma(F_ADCP_spread)      # single-lobe (estimator-fair vs E-PSS)
+        spread_ADCP = lobe_sigma(F_ADCP_spread, smooth=smoothnum)      # single-lobe (estimator-fair vs E-PSS)
 
-        Ff_ADCP = F_ADCP.integrate('direction').data
-        f_m02_ADCP = f_m02_of(f_Hz_ADCP, Ff_ADCP)
-        f_diff = np.abs(f_m02_ADCP-f_Hz_ADCP)
+        f_p_ADCP = f_p_of(f_Hz_ADCP, Ff_ADCP_full)
+        f_diff = np.abs(f_p_ADCP-f_Hz_ADCP)
         ind = np.argmin(f_diff)
         
         ind_peak_ADCP[run_ind] = ind
@@ -211,7 +207,7 @@ for run_ind in np.arange(0,num_runs):
         MWD_ADCP[run_ind] = np.nan
         SPREAD_ADCP[run_ind,:] = np.nan
         
-    f_diff = np.abs(f_m02[run_ind]-f_Hz)
+    f_diff = np.abs(f_p[run_ind]-f_Hz)
     f_diff[0] = 1e3
     ind = np.argmin(f_diff)
     ind_peak_EPSS[run_ind] = ind
@@ -234,12 +230,13 @@ C_m_s_disp_EPSS, _ = lindisp_with_current(omega_EPSS,h_m_EPSS,0)
 # Refract ADCP MWD from 18.3 m to 15 m depth (coastline ~E-W)
 MWD_ADCP_shifted = np.asin(C_m_s_disp_EPSS/C_m_s_disp_ADCP*np.sin(MWD_ADCP*np.pi/180))*180/np.pi
 
-# Fold MWD_EPSS into [-90, 90] to resolve 180° ambiguity
-inds_northerly = MWD_EPSS < -90
-MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] + 180
-inds_northerly = MWD_EPSS > 90
-MWD_EPSS[inds_northerly] = MWD_EPSS[inds_northerly] - 180
-MWD_diff = MWD_EPSS-MWD_ADCP_shifted
+# Fold every estimator's MWD into [-90, 90] to resolve 180° ambiguity
+MWD_EST = np.where(MWD_EST < -90, MWD_EST + 180, MWD_EST)
+MWD_EST = np.where(MWD_EST >  90, MWD_EST - 180, MWD_EST)
+MWD_EPSS = MWD_EST[0,:]
+# estimator minus ADCP, one row per estimator
+MWD_DIFF_EST = MWD_EST - MWD_ADCP_shifted[None,:]
+MWD_diff = MWD_DIFF_EST[0,:]
 
 # Bias, MAE, and RMSE for MWD (E-PSS minus ADCP)
 MWD_bias = np.nanmean(MWD_diff)
@@ -254,14 +251,17 @@ U10_xlim = (U10_bin_centers[0] - dU/2, U10_bin_centers[-1] + dU/2)
 # ticks at every bin edge, out to and including xmax (so the last tick is labeled)
 U10_xticks = np.arange(U10_xlim[0], U10_xlim[1] + dU/2, dU)
 
-bin_medians, bin_mad, _, _ = binned_center_spread(U10_m_s, MWD_diff, U10_bin_edges)
-bin_upper = bin_medians + bin_mad
-bin_lower = bin_medians - bin_mad
-
 fig = plt.figure(figsize=(fullwidth/2,fullwidth/2))
-plt.fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[2], alpha=0.25)
-plt.plot(U10_bin_centers,bin_medians,'-',color=color_list[2],linewidth=2,label=r'$\theta_{E-PSS}-\theta_{ADCP}$')
-plt.plot([0,16],[0,0],'--',color='gray')
+# one curve per estimator, each differenced against the ADCP; MAD bands are
+# faint because five overlap
+plotting_order = [1, 6, 5, 4, 3, 2]   # all above the grid zorder so curves sit over the grid
+for n, (_suffix, lab) in enumerate(estimators):
+    bin_medians, bin_mad, _, _ = binned_center_spread(U10_m_s, MWD_DIFF_EST[n,:], U10_bin_edges)
+    plt.fill_between(U10_bin_centers, bin_medians+bin_mad, bin_medians-bin_mad,
+                     color=color_list[n+1], alpha=0.12)
+    plt.plot(U10_bin_centers,bin_medians,'-',color=color_list[n+1],linewidth=2,label=lab,zorder=plotting_order[n+1])
+plt.plot([0,16],[0,0],'--',color='gray',zorder=plotting_order[0])
+plt.gca().set_axisbelow(True)                 # draw the grid behind the curves
 plt.xlim(*U10_xlim)
 plt.xticks(U10_xticks)
 plt.xticks(np.arange(0,16,2))
@@ -269,6 +269,7 @@ plt.yticks(np.arange(-360,360,15))
 plt.ylim(-45,45)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
+plt.legend(ncol=2,fontsize=fsize-2,loc='upper right')
 
 plt.savefig(figpath + 'delta_theta_nought.pdf',bbox_inches='tight')
 
@@ -276,17 +277,17 @@ plt.savefig(figpath + 'delta_theta_nought.pdf',bbox_inches='tight')
 # %%
 
 SPREAD_ADCP_peak = np.nan*np.ones(num_runs)
-SPREAD_EPSS_peak = SPREAD_ADCP_peak.copy()
+SPREAD_EST_peak = np.nan*np.ones((n_est,num_runs))
 
 for run_num in np.arange(0,num_runs):
     SPREAD_ADCP_peak[run_num] = SPREAD_ADCP[run_num,ind_peak_ADCP[run_num]]
-    SPREAD_EPSS_peak[run_num] = SPREAD_EPSS[run_num,ind_peak_EPSS[run_num]]
+    SPREAD_EST_peak[:,run_num] = SPREAD_EST[:,run_num,ind_peak_EPSS[run_num]]
 
-SPREAD_peak = np.nan*np.ones((num_runs,2))
-SPREAD_peak[:,0] = SPREAD_ADCP_peak
-SPREAD_peak[:,1] = SPREAD_EPSS_peak
+SPREAD_EPSS_peak = SPREAD_EST_peak[0,:]
+# column 0 ADCP, columns 1..n_est estimators; matches palette order
+SPREAD_peak = np.column_stack([SPREAD_ADCP_peak, SPREAD_EST_peak.T])
 
-# Bias, MAE, and RMSE for directional spreading at f_m02 (E-PSS minus ADCP)
+# Bias, MAE, and RMSE for directional spreading at f_p (E-PSS minus ADCP)
 SPREAD_diff = SPREAD_EPSS_peak - SPREAD_ADCP_peak
 SPREAD_bias = np.nanmean(SPREAD_diff)
 SPREAD_mae = np.nanmean(np.abs(SPREAD_diff))
@@ -302,19 +303,36 @@ write_tex_macros('directional_values.tex', {
     'SpreadRMSE': f'{SPREAD_rmse:.2f}',
 }, source='plot_comparison_of_directional_information.py')
 
-labels = ['ADCP','E-PSS']
+labels = ['ADCP'] + [lab for _suffix, lab in estimators]
 
 run_ind = 162
 spread_ADCP = SPREAD_ADCP[run_ind,:]
-spread_EPSS = SPREAD_EPSS[run_ind,:]
 
-def plot_split(ax, x, y, lo, hi, label):
+# sigma_theta(f) from the direct 3-D-FFT short-wave spectrum, this case only.
+# sigma_theta depends on D alone, so the direct SLOPE spectrum needs no k^-2
+# conversion. Its frequency grid is ~4x denser than the estimators', so the
+# rolling median widens by the same ratio to span the same fractional bandwidth.
+ds_direct = nc.Dataset(path+'ASIT2019_wave_spectra_stats_timeseries_empirical_gain.nc')
+S_f_theta_direct = np.ma.filled(ds_direct['S_f_theta'][run_ind],np.nan).T   # (f, theta)
+f_Hz_direct = np.asarray(ds_direct['f_Hz'][:])
+theta_deg_direct = np.degrees(np.asarray(ds_direct['theta_rad'][:]))
+ds_direct.close()
+
+smoothnum_direct = smoothnum*SPREAD_SMOOTHNUM_DIRECT//SPREAD_SMOOTHNUM
+spread_direct = lobe_sigma(
+    xr.DataArray(S_f_theta_direct,dims=('frequency','direction'),
+                 coords={'frequency': f_Hz_direct,'direction': theta_deg_direct}),
+    smooth=smoothnum_direct)
+f_direct_trust_low = 0.7        # the splice cut: direct is the reference above it
+
+def plot_split(ax, x, y, lo, hi, label, color=None, linestyle='-',linewidth=2):
     # solid within [lo, hi], faded outside (hi=None = no upper bound)
     x = np.asarray(x)
     solid = np.ones(len(x), bool)
     if lo is not None: solid &= x >= lo
     if hi is not None: solid &= x <= hi
-    line, = ax.plot(x, np.where(solid, y, np.nan), label=label, linewidth=2)
+    line, = ax.plot(x, np.where(solid, y, np.nan), label=label, linewidth=linewidth,
+                    color=color, linestyle=linestyle)
     if solid.any():
         i0, i1 = np.where(solid)[0][[0, -1]]
         faded = []
@@ -327,41 +345,60 @@ def plot_split(ax, x, y, lo, hi, label):
             m[i1:] = True
             faded.append(m)
         for fm in faded:
-            ax.plot(x, np.where(fm, y, np.nan), color=line.get_color(), linewidth=2, alpha=alpha_faded)
+            ax.plot(x, np.where(fm, y, np.nan), color=line.get_color(), linewidth=linewidth, alpha=alpha_faded, linestyle=linestyle)
 
 fig,axs = plt.subplots(1,2,figsize=(fullwidth,fullwidth*0.4))
-plot_split(axs[0], F_ADCP["frequency"], spread_ADCP, f_low, f_ADCP_trust_high, "ADCP")
-plot_split(axs[0], F_EPSS["frequency"], spread_EPSS, f_low, None, "E-PSS")
-axs[0].plot(f_Hz[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90])
+axs[0].text(2.8e-2,47,'ADCP',color='black',
+            ha='center',va='bottom',fontsize=fsize-2)
+plot_split(axs[0], F_ADCP["frequency"], spread_ADCP, f_low, f_ADCP_trust_high,
+           "ADCP", color_list[0], linestyle='--', linewidth=2.5)
+for n, (_suffix, lab) in enumerate(estimators):
+    plot_split(axs[0], f_Hz, SPREAD_EST[n,run_ind,:], f_low, None, lab,
+               color_list[n+1])
+# the direct short-wave estimate, solid only above the splice cut, where it is
+# the reference the estimators are read against rather than an extrapolation.
+# Gray and dash-dot to read as a reference alongside the dashed black ADCP,
+# without taking a slot in the estimator palette.
+plot_split(axs[0], f_Hz_direct, spread_direct, f_direct_trust_low, None,
+           'direct FFT', 'black', linestyle=':', linewidth=2.5)
+# panel (a) carries no legend (panel (b) holds it), so this one is named inline
+_i_lab = np.argmin(np.abs(f_Hz_direct-2.0))
+axs[0].text(2.0,spread_direct[_i_lab]+2.5,'direct FFT',color='black',
+            ha='center',va='bottom',fontsize=fsize-2)
+# f_p marker black dotted, matching the ADCP curve
+axs[0].plot(f_Hz[ind_peak_EPSS[run_ind]]*np.float64([1.0,1.0]),[0,90],
+            '-',color='k',linewidth=1.5)
 axs[0].set_xscale('log')
 axs[0].set_yticks(np.arange(0,360,15))
 axs[0].set_ylim(0,90)
-axs[0].set_xlim(1e-2,1e0)
+axs[0].set_xlim(2e-2,5e0)
 axs[0].set_xlabel('f [Hz]')
 axs[0].set_ylabel(r'$\sigma_{\theta}$ [$\circ$]')
-axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.9,82.5,r'$f_{m02}$',color=color_list[2],ha='right')
+axs[0].text(f_Hz[ind_peak_EPSS[run_ind]]*0.9,82.5,r'$f_p$',color='k',ha='right')
 
 axs[0].grid(which='major', linestyle='-', linewidth=0.75)
 axs[0].grid(which='minor', linestyle=':', linewidth=0.75)
+axs[0].set_axisbelow(True)                     # draw the grid behind the curves
 
-for n in np.arange(2):
+for n in np.arange(SPREAD_peak.shape[1]):
 
     bin_medians, bin_mad, _, _ = binned_center_spread(U10_m_s, SPREAD_peak[:,n], U10_bin_edges)
     bin_upper = bin_medians + bin_mad
     bin_lower = bin_medians - bin_mad
 
-    axs[1].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[n], alpha=0.25)
-    axs[1].plot(U10_bin_centers,bin_medians,'-',linewidth=2,label=labels[n])
+    axs[1].fill_between(U10_bin_centers, bin_upper, bin_lower, color=color_list[n], alpha=0.12)
+    axs[1].plot(U10_bin_centers,bin_medians,'--' if n==0 else '-',color=color_list[n],linewidth=2.5 if n==0 else 2,label=labels[n],zorder=plotting_order[n])
 
 
+axs[1].set_axisbelow(True)                      # draw the grid behind the curves
 axs[1].set_yticks(np.arange(0,360,15))
 axs[1].set_ylim(0,90)
 axs[1].set_xlim(*U10_xlim)
 axs[1].set_xticks(U10_xticks)
 axs[1].set_xticks(np.arange(0,16,2))
 axs[1].set_xlabel(r'$U_{10}$ [m s$^{-1}$]')
-axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_{m02}$ [$\circ$]')
-axs[1].legend()
+axs[1].set_ylabel(r'$\sigma_{\theta}$, evaluated at $f=f_p$ [$\circ$]')
+axs[1].legend(ncol=2,fontsize=fsize-2)
 
 for n in np.arange(2):
     

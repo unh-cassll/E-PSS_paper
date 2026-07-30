@@ -1,5 +1,5 @@
 # Plot directional wave spectra (polar and Cartesian) for a single run,
-# comparing ADCP/MEM and E-PSS/EWDM estimates.
+# comparing ADCP/IMLM and E-PSS/EWDM estimates.
 # @author: nathanlaxague
 
 import numpy as np
@@ -75,7 +75,6 @@ f_cut_high = np.sqrt(9.81*k_rad_m_Pyxis[0])/(2*np.pi)
 f_cut_low = 0.05
 
 theta_halfwidth = 120
-smoothnum = 3
 
 S_f_theta_Pyxis_particular = S_f_theta_Pyxis[run_ind,:,:].T
 S_k_theta_Pyxis_particular = S_k_theta_Pyxis[run_ind,:,:].T
@@ -129,11 +128,13 @@ F_ADCP.data[inds_exclude,:] = 0
 inds_exclude = (F_EPSS["frequency"].data > f_cut_high) | (F_EPSS["frequency"].data < f_cut_low)
 F_EPSS.data[inds_exclude,:] = 0
 
-D_ADCP = ((F_ADCP.T / F_ADCP.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T
+# estimator grids take the shared default window; the direct spectrum's grid is
+# ~4x denser, so it takes the wider one to span the same fractional bandwidth
+D_ADCP = norm_smooth(F_ADCP)
 
-Df_Pyxis = ((dataset_Pyxis_frequency.Ffd.T / dataset_Pyxis_frequency.Ffd.integrate("direction")).rolling(frequency=9, center=True).median()).T
+Df_Pyxis = norm_smooth(dataset_Pyxis_frequency.Ffd, smooth=SPREAD_SMOOTHNUM_DIRECT)
 
-D_EPSS = ((F_EPSS.T / F_EPSS.integrate("direction")).rolling(frequency=smoothnum, center=True).median()).T
+D_EPSS = norm_smooth(F_EPSS)
 
 # %%
 # Directional wave spectra (polar plot)
@@ -152,7 +153,7 @@ plot_directional_spectrum(
     cmap=epss_cmap, axes_kw=axes_kw, vmin=vmin, vmax=vmax,
     curspd=U10[run_ind], curdir=90 - (winddir[run_ind] + 180),   # point downwind (curdir path -> red arrow; lib wind arrow is hardcoded black)
 )
-_ = ax1.set(xlabel="", ylabel="", title="MEM (ADCP)")
+_ = ax1.set(xlabel="", ylabel="", title="IMLM (ADCP)")
 _ = ax2.set(xlabel="", ylabel="", title="EWDM Arrays (E-PSS)")
 
 ax1.grid(False)
@@ -170,20 +171,24 @@ plt.savefig(figpath + 'directional_spectra_polar.pdf',bbox_inches='tight',dpi=30
 # %%
 # Directional wave spectra (Cartesian grid)
 
-D_ADCP.data[D_ADCP.data<1e-10] = np.nan
-D_EPSS.data[D_EPSS.data<1e-10] = np.nan
+# D_ADCP.data[D_ADCP.data<1e-10] = np.nan
+# D_EPSS.data[D_EPSS.data<1e-10] = np.nan
 
 winddir_plot = np.mod(winddir[run_ind]+180,360)
 if winddir_plot > 180:
     winddir_plot = winddir_plot-360
 
-Dlims = [0,0.012]
+inds_keep = f_Hz_ADCP < f_cut_high
+inds_keep_EPSS = D_EPSS["frequency"].data < f_cut_high
+inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high
+
+# same shared color limit as the spreading-panel figure: each panel's own
+# percentile, then the median across panels
+Dlims = [0, panel_vmax([D_ADCP[inds_keep,:].data,
+                        D_EPSS[inds_keep_EPSS,:].data,
+                        Df_Pyxis[inds_keep_Pyxis,:].data])]
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fullwidth,fullwidth*0.45), layout="constrained")
-
-inds_keep = f_Hz_ADCP < f_cut_high
-inds_keep_MEM = D_EPSS["frequency"].data < f_cut_high
-inds_keep_Pyxis = Df_Pyxis["frequency"].data > f_cut_high
 
 pc1 = ax1.pcolormesh(theta_deg_ADCP,f_Hz_ADCP[inds_keep],D_ADCP[inds_keep,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax1.pcolor(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
@@ -191,19 +196,19 @@ ax1.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='#00E5F
 ax1.set_yscale('log')
 ax1.set_xticks(np.arange(-360,360,45))
 ax1.set_xlim(-180,180)
-ax1.set_ylim(5e-2,2e1)
+ax1.set_ylim(8e-2,2e1)
 ax1.set_xlabel(r'$\theta$ [$\circ$]')
 ax1.set_ylabel('f [Hz]')
 ax1.text(0.93,0.90,'(a)',color='white',fontsize=fsize,ha='center',va='center',transform=ax1.transAxes)
-ax1.set(title="MEM (ADCP)")
+ax1.set(title="IMLM (ADCP)")
 
-pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_MEM],D_EPSS.data[inds_keep_MEM,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
+pc2 = ax2.pcolormesh(D_EPSS["direction"],D_EPSS["frequency"].data[inds_keep_EPSS],D_EPSS.data[inds_keep_EPSS,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax2.pcolormesh(Df_Pyxis["direction"],Df_Pyxis["frequency"].data[inds_keep_Pyxis],Df_Pyxis.data[inds_keep_Pyxis,:],vmin=Dlims[0],vmax=Dlims[1],cmap='magma',rasterized='true')
 ax2.plot(winddir_plot*np.float64([1.0,1.0]),np.float64([1e-3,1e3]),color='#00E5FF',ls=':',lw=1.5,label='wind direction')
 ax2.set_yscale('log')
 ax2.set_xticks(np.arange(-360,360,45))
 ax2.set_xlim(-180,180)
-ax2.set_ylim(5e-2,2e1)
+ax2.set_ylim(8e-2,2e1)
 ax2.set_xlabel(r'$\theta$ [$\circ$]')
 ax2.set_yticklabels([])
 ax2.text(0.93,0.90,'(b)',color='white',fontsize=fsize,ha='center',va='center',transform=ax2.transAxes)
