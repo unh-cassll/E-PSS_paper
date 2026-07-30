@@ -9,6 +9,7 @@ scientimate
 
 matplotlib
 seaborn
+pypalettes
 
 # wavenumber/inverse-phase-speed spectra (coordinate="wavenumber"/"nu" in
 # Arrays.compute()) are now merged into upstream main.
