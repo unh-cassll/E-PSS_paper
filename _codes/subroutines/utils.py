@@ -7,12 +7,17 @@ Project-specific helpers for the E-PSS paper.
     write_tex_macros                      LaTeX \newcommand value file for paper.tex
     scatter_metrics                       R^2/RMSE/slope/bias of a scatter comparison
     draw_metrics_box                      inset metrics table for scatter figures
+    york_fit, york_band                   ML fit with errors in x and y, + conf band
+    lidar_member_spectra                  per-instrument Riegl spectra (empirical sigma)
+    lidar_consistency_flag                reject records where the Riegl units disagree
     ewdm_low_cutoff                       EWDM low-scale trust cutoff (k_low, f_low)
     epss_ewdm_grids                       EWDM f/k/nu grids (generator config)
     mueller_calc_full                     4-Stokes sky+upwelling Mueller calc
     compute_gram_charlier_slope_pdf       Cox-Munk Gram-Charlier slope PDF
     fit_gram_charlier_slope_pdf           least-squares Gram-Charlier fit
     omni_complete_spectrum                directionally-complete (S_sx+S_sy)/k^2 spectrum
+    spreading                             row-normalized D(theta|scale) [per-degree]
+    lobe_spread, lobe_sigma               single-lobe sigma_theta(scale) [deg]
     compute_mean_wave_direction_and_spreading
 """
 
@@ -38,10 +43,15 @@ __all__ = [
     'GRAV', 'L_FOV_M', 'N_PX', 'DX_M', 'WATER_DEPTH_M', 'FS_HZ', 'NUM_RUNS',
     'NUM_SAMPLES',
     'figure_style', 'wind_speed_bins', 'binned_center_spread', 'write_tex_macros',
-    'scatter_metrics', 'draw_metrics_box', 'ewdm_low_cutoff', 'epss_ewdm_grids',
+    'scatter_metrics', 'draw_metrics_box', 'york_fit', 'york_band',
+    'lidar_member_spectra', 'lidar_consistency_flag',
+    'MEDIAN3_SIGMA_FACTOR', 'ewdm_low_cutoff', 'epss_ewdm_grids',
     'mueller_calc_full', 'compute_gram_charlier_slope_pdf',
     'fit_gram_charlier_slope_pdf',
-    'omni_complete_spectrum', 'compute_mean_wave_direction_and_spreading',
+    'omni_complete_spectrum', 'SPREAD_SMOOTHNUM', 'SPREAD_SMOOTHNUM_DIRECT',
+    'spreading', 'norm_smooth', 'wrap_deg', 'panel_vmax',
+    'lobe_spread', 'lobe_sigma',
+    'compute_mean_wave_direction_and_spreading',
 ]
 
 # %%
@@ -204,6 +214,219 @@ def scatter_metrics(x, y):
     slope, _ = np.polyfit(x[keep], y[keep], 1)
     bias = float(np.mean(y[keep] - x[keep]))
     return r**2, rmse, float(slope), bias
+
+
+def york_fit(x, y, sigma_x, sigma_y, r=0.0, tol=1e-12, maxiter=500,
+             calibrate=False, calib_iter=20):
+    """Maximum-likelihood straight-line fit with uncertainty in BOTH variables,
+    by the unified equations of York et al. (2004).
+
+    Ordinary least squares treats x as exact, so error in x attenuates the slope
+    toward zero -- reporting a slope below unity that is partly an artifact of the
+    reference's own noise. This solves the errors-in-variables problem properly.
+
+    With r = 0 the per-point weight reduces to W = 1/(sigma_y^2 + b^2 sigma_x^2),
+    i.e. the effective-variance weight of Orear (1982); York's formulation is the
+    exact ML solution and also supplies the standard errors.
+
+    Args:
+        x, y: paired observations; non-finite pairs are dropped.
+        sigma_x, sigma_y: 1-sigma uncertainties, scalar or per point.
+        r: correlation between the x and y errors, scalar or per point.
+        calibrate: rescale sigma_y by a single constant until the reduced
+            chi-square is unity, holding sigma_x and the shape of sigma_y fixed.
+            Use when sigma_x is known independently but sigma_y is not: the
+            excess scatter is then attributed to y, which is the conservative
+            assignment (it drives lambda up and the slope toward OLS, rather
+            than inflating the slope by blaming the reference). The applied
+            factor is returned as 'sy_inflation'.
+
+    Returns:
+        dict with 'slope', 'intercept', 'se_slope', 'se_intercept',
+        'chi2_reduced' (S/(n-2)), 'se_slope_expanded' and 'n'.
+
+    A reduced chi-square far above unity means the supplied uncertainties do not
+    account for the observed scatter -- unmodeled disagreement between the two
+    quantities rather than measurement noise. The slope is still the ML estimate
+    under the given weights, but its nominal standard error is then far too small,
+    so 'se_slope_expanded' scales it by sqrt(chi2_reduced). Quote the expanded
+    error whenever chi2_reduced >> 1, and say so.
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    sx = np.broadcast_to(np.asarray(sigma_x, float), x.shape).astype(float)
+    sy = np.broadcast_to(np.asarray(sigma_y, float), y.shape).astype(float)
+    rr = np.broadcast_to(np.asarray(r, float), x.shape).astype(float)
+    g = (np.isfinite(x) & np.isfinite(y) & np.isfinite(sx) & np.isfinite(sy)
+         & (sx > 0) & (sy > 0))
+    x, y, sx, sy, rr = x[g], y[g], sx[g], sy[g], rr[g]
+    n = x.size
+    if n < 3:
+        return dict(slope=np.nan, intercept=np.nan, se_slope=np.nan,
+                    se_intercept=np.nan, chi2_reduced=np.nan,
+                    se_slope_expanded=np.nan, n=n)
+
+    if calibrate:
+        # rescale sigma_y until chi2_reduced -> 1; the weights depend on the
+        # slope, so the factor and the fit are found together
+        k = 1.0
+        for _ in range(calib_iter):
+            f = york_fit(x, y, sx, sy * k, rr, tol, maxiter)
+            c2 = f['chi2_reduced']
+            if not np.isfinite(c2) or c2 <= 0:
+                break
+            k *= np.sqrt(c2)
+            if abs(c2 - 1.0) < 1e-6:
+                break
+        out = york_fit(x, y, sx, sy * k, rr, tol, maxiter)
+        out['sy_inflation'] = float(k)
+        return out
+
+    wx, wy = 1.0 / sx ** 2, 1.0 / sy ** 2
+    alpha = np.sqrt(wx * wy)
+    # OLS start; the iteration is on the slope only
+    b = np.polyfit(x, y, 1)[0]
+    for _ in range(maxiter):
+        W = wx * wy / (wx + b ** 2 * wy - 2.0 * b * rr * alpha)
+        sW = W.sum()
+        xb, yb = (W * x).sum() / sW, (W * y).sum() / sW
+        U, V = x - xb, y - yb
+        beta = W * (U / wy + b * V / wx - (b * U + V) * rr / alpha)
+        denom = (W * beta * U).sum()
+        if denom == 0:
+            break
+        b_new = (W * beta * V).sum() / denom
+        if abs(b_new - b) < tol * max(abs(b), 1.0):
+            b = b_new
+            break
+        b = b_new
+
+    W = wx * wy / (wx + b ** 2 * wy - 2.0 * b * rr * alpha)
+    sW = W.sum()
+    xb, yb = (W * x).sum() / sW, (W * y).sum() / sW
+    U, V = x - xb, y - yb
+    beta = W * (U / wy + b * V / wx - (b * U + V) * rr / alpha)
+    a = yb - b * xb
+    # adjusted points, then the slope variance about their weighted centroid
+    x_adj = xb + beta
+    u = x_adj - (W * x_adj).sum() / sW
+    var_b = 1.0 / (W * u ** 2).sum()
+    S = (W * (y - b * x - a) ** 2).sum()
+    chi2_red = S / (n - 2)
+    return dict(slope=float(b), intercept=float(a),
+                se_slope=float(np.sqrt(var_b)),
+                se_intercept=float(np.sqrt(1.0 / sW + xb ** 2 * var_b)),
+                chi2_reduced=float(chi2_red),
+                se_slope_expanded=float(np.sqrt(var_b * max(chi2_red, 1.0))),
+                var_slope=float(var_b), sum_weights=float(sW),
+                x_centroid=float(xb), n=int(n))
+
+
+def lidar_consistency_flag(member_spectra, freqs, f_lo=0.10, f_hi=0.70,
+                           max_dev=0.10, min_live=2, dead_hm0=1e-3):
+    """Reject records where one Riegl unit reports a different sea state.
+
+    The three units sit on an equilateral triangle of 1.6 m sides, so at the
+    scales resolved here they sample the same water. A time-varying relative
+    time-base drift between the units destroys their phase relationship -- which
+    is why no directional spectrum can be formed from the triad -- but leaves
+    each unit's total variance intact. Hm0 is therefore the drift-immune
+    discriminator: units that disagree on it are not merely out of step, one of
+    them is measuring something else, and there is no way to tell which.
+
+    A unit reporting essentially zero has no data rather than a small sea; that
+    is tolerated as long as `min_live` units remain.
+
+    Args:
+        member_spectra: (n_freq, n_run, n_unit) per-unit spectra [m^2/Hz].
+        freqs: frequency axis [Hz].
+        max_dev: reject above this fractional departure of any live unit from
+            the across-unit median Hm0.
+
+    Returns:
+        (reject, max_deviation, n_live) -- reject is True where the record should
+        be dropped, either for unit disagreement or for too few live units.
+    """
+    freqs = np.asarray(freqs, float)
+    band = np.where((freqs >= f_lo) & (freqs <= f_hi), 1.0, np.nan)
+    df = np.median(np.diff(freqs))
+    with warnings_suppressed():
+        Hm0 = 4 * np.sqrt(np.nansum(band[:, None, None] * member_spectra,
+                                    axis=0) * df)
+        Hm0 = np.where(Hm0 > dead_hm0, Hm0, np.nan)
+        n_live = np.isfinite(Hm0).sum(1)
+        med = np.nanmedian(Hm0, axis=1)
+        dev = (np.nanmax(np.abs(Hm0 - med[:, None]), axis=1)
+               / np.where(med > 0, med, np.nan))
+    reject = (n_live < min_live) | (np.isfinite(dev) & (dev > max_dev))
+    return reject, dev, n_live
+
+
+class warnings_suppressed:
+    """All-NaN slices are expected here (records with no lidar at all)."""
+
+    def __enter__(self):
+        self._c = np.errstate(invalid='ignore', divide='ignore')
+        self._c.__enter__()
+        import warnings as _w
+        self._w = _w.catch_warnings()
+        self._w.__enter__()
+        _w.simplefilter('ignore', RuntimeWarning)
+        return self
+
+    def __exit__(self, *a):
+        self._w.__exit__(*a)
+        self._c.__exit__(*a)
+        return False
+
+
+def york_band(fit, x, level=0.95):
+    """Confidence band on a `york_fit` line: (lo, hi) at abscissae `x`.
+
+    The fit pivots about its weighted centroid, where the slope and the line
+    height are uncorrelated, so the variance of the fitted ordinate is
+    1/sum(W) + (x - x_centroid)^2 var(slope) -- the familiar hyperbolic band,
+    narrowest at the centroid. Uses Student t with n-2 degrees of freedom.
+
+    This is a band on the fitted relationship, not a prediction interval for
+    individual records. When the fit was calibrated (chi2_reduced driven to
+    unity) the band reflects the observed scatter rather than a priori errors."""
+    from scipy import stats as _stats
+    x = np.asarray(x, float)
+    yhat = fit['intercept'] + fit['slope'] * x
+    var = 1.0 / fit['sum_weights'] + (x - fit['x_centroid']) ** 2 * fit['var_slope']
+    t = _stats.t.ppf(0.5 + level / 2.0, max(fit['n'] - 2, 1))
+    half = t * np.sqrt(var)
+    return yhat - half, yhat + half
+
+
+# Combining the three Riegl spectra by median rather than mean: for 3 normal
+# samples var(median) = 1.5 var(mean), so the published lidar spectrum carries
+# sqrt(1.5/3) of a single instrument's sampling error.
+MEDIAN3_SIGMA_FACTOR = np.sqrt(1.5 / 3.0)
+
+
+def lidar_member_spectra(path='../_data/', nfft=3000, nperseg=1500, fs=None):
+    """Per-instrument Riegl elevation spectra, (n_freq, n_run, 3) [m^2/Hz].
+
+    The published `F_f_m2_Hz_lidar` is the across-instrument median of these, so
+    the spread across the three is an empirical, per-record uncertainty on any
+    quantity derived from the lidar reference -- no assumed error model needed.
+    Welch parameters match compute_all_omnidirectional_spectra.py."""
+    import netCDF4 as _nc
+    fs = FS_HZ if fs is None else fs
+    ds = _nc.Dataset(path + 'ASIT2019_supporting_environmental_observations.nc')
+    wse = np.ma.filled(ds['wse_m_Riegl'][:], np.nan)      # (3, n_samp, n_run)
+    ds.close()
+    n_l, _, n_r = wse.shape
+    out = np.full((nfft // 2 + 1, n_r, n_l), np.nan)
+    for ri in range(n_r):
+        for li in range(n_l):
+            xi = wse[li, :, ri]
+            if np.isfinite(xi).sum() < nperseg:
+                continue
+            f, P = signal.welch(np.nan_to_num(xi), fs, nfft=nfft, nperseg=nperseg)
+            out[:, ri, li] = P
+    return out
 
 
 def draw_metrics_box(ax, metrics, labels, colors, units, box_xy, box_w, box_h,
@@ -421,6 +644,112 @@ def omni_complete_spectrum(slope_east, slope_north, water_depth_m, fs_Hz,
             -(np.log2(np.maximum(f, 1e-9)) - np.log2(corner)) / transition_octaves))
         S = S * hp ** 2
     return f, S
+
+
+# %%
+
+# Directional spreading helpers. SPREAD_SMOOTHNUM is the default centered
+# rolling-mean window (over the scale/frequency axis) applied to spreading
+# densities; set it to 0 to turn that smoothing off everywhere at once.
+#
+# The direct 3-D-FFT spectrum carries ~37 points per octave against ~7-10 for
+# the ADCP and EWDM grids, so it takes a wider window to span the same
+# fractional bandwidth (9/37 vs 3/10 of an octave).
+
+SPREAD_SMOOTHNUM = 3
+SPREAD_SMOOTHNUM_DIRECT = 9
+
+
+def _rolling_mean(a, n):
+    """Centered n-point rolling mean over axis 0 (NaN-aware, edge-shrinking).
+    n <= 1 (or None) returns the input unchanged, i.e. smoothing off.
+
+    Note that `compute_mean_wave_direction_and_spreading` smooths with a true
+    rolling median instead; the two are not interchangeable on a ragged row."""
+    a = np.asarray(a, float)
+    if n is None or n <= 1:
+        return a
+    m = a.shape[0]
+    h = n // 2
+    out = a.copy()
+    for i in range(m):
+        out[i] = np.nanmean(a[max(0, i - h):min(m, i + h + 1)], axis=0)
+    return out
+
+
+def spreading(F, dtheta, smooth=None):
+    """Row-normalized directional spreading D(theta|scale), per-degree density.
+
+    F is (scale, direction); dtheta is the direction step [deg]. Each scale row is
+    normalized to unit integral over direction and returned per-degree, so a
+    per-radian input differs from this by 180/pi. Rows with no energy stay NaN so
+    an unsupported band renders blank rather than as zero density. `smooth` is the
+    centered rolling-mean window over the scale axis: None uses SPREAD_SMOOTHNUM,
+    0 or 1 disables it.
+    """
+    tot = np.nansum(F, axis=1, keepdims=True) * np.radians(dtheta)
+    D = np.divide(F, tot, out=np.full_like(F, np.nan), where=tot > 0) * np.pi / 180
+    return _rolling_mean(D, SPREAD_SMOOTHNUM if smooth is None else smooth)
+
+
+def norm_smooth(F, smooth=None):
+    """`spreading` for an xarray (scale, direction) carrying a degree direction
+    coordinate. Returns a DataArray on the same coords; `smooth` behaves as in
+    `spreading`."""
+    dth = float(np.median(np.diff(F['direction'].data)))
+    D = F.copy()
+    D.data = spreading(F.data, dth, smooth=smooth)
+    return D
+
+
+def wrap_deg(x):
+    """Directions wrapped onto [-180, 180) deg."""
+    return (np.asarray(x) + 180.0) % 360.0 - 180.0
+
+
+def panel_vmax(panel_vals, pct=98):
+    """Upper color limit shared across panels, weighting each panel equally.
+
+    A percentile pooled over the panels is dominated by whichever one retains
+    the most in-window rows, so a low-support panel (the ADCP, on its coarse
+    grid) would otherwise set the scale for everything. Take each panel's own
+    percentile, then the median across panels."""
+    per = [np.nanpercentile(v, pct) for v in panel_vals
+           if np.size(v) and np.isfinite(v).any()]
+    return float(np.nanmedian(per)) if per else 1.0
+
+
+def lobe_spread(dirs_deg, dens, halfwidth=90.0):
+    """Single-lobe RMS directional spread sigma_theta(scale) [deg]. +-halfwidth
+    deg isolates the dominant lobe, excluding the direct mirror lobe."""
+    th = np.radians(np.asarray(dirs_deg))
+    E = np.nan_to_num(dens)
+    nsc = E.shape[0]
+    sig = np.full(nsc, np.nan)
+    h = np.radians(halfwidth)
+    for j in range(nsc):
+        D = E[j]
+        s = D.sum()
+        if s <= 0:
+            continue
+        a = (D * np.cos(th)).sum()
+        b = (D * np.sin(th)).sum()
+        d = np.angle(np.exp(1j * (th - np.arctan2(b, a))))
+        Dk = D * (np.abs(d) <= h)
+        sk = Dk.sum()
+        if sk <= 0:
+            continue
+        thc = np.arctan2((Dk * np.sin(th)).sum(), (Dk * np.cos(th)).sum())
+        d2 = np.angle(np.exp(1j * (th - thc)))
+        sig[j] = np.degrees(np.sqrt((Dk * d2 ** 2).sum() / sk))
+    return sig
+
+
+def lobe_sigma(F, halfwidth=90.0, smooth=5):
+    """Single-lobe sigma_theta(scale) from an xarray (scale, direction) with a
+    degree direction coord, smoothed by a centered rolling mean (smooth<=1 off)."""
+    return _rolling_mean(
+        lobe_spread(F['direction'].data, np.nan_to_num(F.data), halfwidth), smooth)
 
 
 # %%
