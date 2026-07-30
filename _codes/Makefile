@@ -6,14 +6,16 @@ figures: aperture_field_stitch \
 	binned_omnispect \
 	comparison_of_directional_information \
 	directional_spectra \
+	directional_spreading_panels \
 	DoLP_AOI_inference \
 	DoLP_AOI_gain \
 	Hm0_scatterplots_lidar_EPSS \
 	longwave_shortwave_demo \
 	mueller_calc \
+	phase_elevation_pair \
 	slope_elev_timeseries_and_spectra \
 	slope_stats \
-	Tm02_scatterplots_lidar_EPSS \
+	Tp_scatterplots_lidar_EPSS \
 	wave_measurement_stommel_diagram
 
 aperture_field_stitch: plot_aperture_field_stitch.py
@@ -39,6 +41,10 @@ directional_spectra: plot_directional_spectra.py
 	@echo "saved directional_spectra_polar.pdf to file"
 	@echo "saved directional_spectra_combined.pdf to file"
 
+directional_spreading_panels: plot_directional_spreading_panels.py
+	@python3 plot_directional_spreading_panels.py
+	@echo "saved directional_spreading_panels.pdf to file"
+
 DoLP_AOI_inference: plot_DoLP_AOI_inference.py
 	@python3 plot_DoLP_AOI_inference.py
 	@echo "saved DoLP_AOI_inference.pdf to file"
@@ -56,6 +62,10 @@ mueller_calc: plot_mueller_calc.py
 	@python3 plot_mueller_calc.py
 	@echo "saved mueller_calc_example.pdf to file"
 
+phase_elevation_pair: plot_phase_elevation_pair.py
+	@python3 plot_phase_elevation_pair.py
+	@echo "saved phase_elevation_pair.pdf to file"
+
 slope_elev_timeseries_and_spectra: plot_slope_elev_timeseries_and_spectra.py
 	@python3 plot_slope_elev_timeseries_and_spectra.py
 	@echo "saved elevation_omnispect.pdf to file"
@@ -65,10 +75,10 @@ slope_stats: plot_slope_stats.py
 	@echo "saved mss_upwind_crosswind.pdf to file"
 	@echo "saved slope_distribution_GC_coeffs.pdf to file"
 
-Tm02_scatterplots_lidar_EPSS: plot_Tm02_scatterplots_lidar_EPSS.py
-	@python3 plot_Tm02_scatterplots_lidar_EPSS.py
-	@echo "saved Tm02_comparison_lidar_epss.pdf to file"
-	@echo "saved Tm02_values.tex to file"
+Tp_scatterplots_lidar_EPSS: plot_Tp_scatterplots_lidar_EPSS.py
+	@python3 plot_Tp_scatterplots_lidar_EPSS.py
+	@echo "saved Tp_comparison_lidar_epss.pdf to file"
+	@echo "saved Tp_values.tex to file"
 
 wave_measurement_stommel_diagram: plot_wave_measurement_stommel_diagram.py
 	@python3 plot_wave_measurement_stommel_diagram.py
