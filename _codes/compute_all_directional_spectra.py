@@ -45,11 +45,19 @@ recolor_band = tuple(float(x) for x in _rb.split(','))
 dx = DX_M
 freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
 
-# onshore swell tiebreaker: 3 km south of Martha's Vineyard, so long swell must
-# propagate onshore (northward); flip a swell-dominated run reading offshore.
+# Onshore swell tiebreaker: ASIT is 3 km south of Martha's Vineyard, so long
+# swell propagates onshore (northward); flip a swell-dominated run that reads
+# offshore. Superseded by the curvature phase in `fourier_slope_projection`;
+# off by default, EPSS_TIEBREAK=1 restores it.
 onshore_dir = 0.0
 swell_cut = 0.16
 swell_frac = 0.15
+use_tiebreaker = os.environ.get('EPSS_TIEBREAK', '0') not in ('0', '', 'false')
+
+# traditional cross-spectral-matrix estimators run alongside EWDM on the same
+# elevation field; '' disables them
+_tm = os.environ.get('EPSS_CSM_METHODS', 'EMEP,BDM,IMLM').strip()
+csm_methods = tuple(m for m in _tm.split(',') if m)
 
 _DS = {}
 
@@ -66,6 +74,66 @@ def _ds():
 def _ewmean(deg, w):
     a = np.radians(deg)
     return np.degrees(np.arctan2((w * np.sin(a)).sum(), (w * np.cos(a)).sum()))
+
+
+def _dir_moments(F, theta_deg):
+    """Energy-weighted mean direction [deg CW from N] and Kuik spread [deg] per
+    frequency row of F(f, theta)."""
+    w = np.where(np.isfinite(F), F, 0.0)
+    tot = w.sum(1)
+    a = np.radians(theta_deg)
+    c, s_ = (w * np.cos(a)).sum(1), (w * np.sin(a)).sum(1)
+    thbar = np.degrees(np.arctan2(s_, c)) % 360.0
+    m1 = np.divide(np.hypot(c, s_), tot, out=np.zeros_like(tot), where=tot > 0)
+    sigma = np.degrees(np.sqrt(np.clip(2.0 * (1.0 - m1), 0.0, None)))
+    return (np.where(tot > 0, thbar, np.nan),
+            np.where(tot > 0, sigma, np.nan))
+
+
+def _triplet_spectrum(eta, dx, fs, freqs, theta_deg, Sf):
+    """Single-point EWDM triplet F(f, theta) [m^2/Hz/rad] from the frame-center
+    (elevation, east slope, north slope), the heave-pitch-roll configuration of
+    a directional wave buoy. Interpolated onto the project direction grid and
+    scaled by the E-PSS omnidirectional spectrum.
+
+    Direction mapping theta -> 270 - theta. `Triplets` reports the math
+    convention (CCW from East; `theta_from_slopes` returns
+    arctan2(Im W_ny, Im W_ex)) and only the `MultiApertureArrays` path carries
+    `direction_convention`, so the output is sampled at the math angles of the
+    requested compass directions; reading the math axis as a compass axis
+    reflects the spectrum about the 45-deg line. The further 180 deg is the
+    going-to flip.
+
+    Calibrated over the 76 ADCP records in 0.08-0.30 Hz, the band the
+    directional figures show (panels splice the direct spectrum in above
+    0.7 Hz): 21.1 deg median, 3/76 wrong hemisphere, vs 158.9 deg and 73/76
+    unflipped. Agreement with the EWDM LSQ product is 8.3 deg in that band and
+    12.4 deg over 0.30-0.70 Hz. The triplet sign crosses over at ~0.7 Hz
+    (k L = 2 pi), so it disagrees above the splice cut; do not quote it there."""
+    import xarray as xr
+    from ewdm import Triplets
+    ny, nx, T = eta.shape
+    ci, cj = ny // 2, nx // 2
+    gy, gx = np.gradient(eta, dx, axis=(0, 1))
+    ds = xr.Dataset(
+        {'surface_elevation': ('time', eta[ci, cj, :]),
+         'eastward_slope': ('time', gx[ci, cj, :]),
+         'northward_slope': ('time', gy[ci, cj, :])},
+        coords={'time': np.arange(T) / fs})
+    # interpolate=False: the reconstructed field has no gaps, and the gap
+    # filler needs a datetime index rather than elapsed seconds
+    out = Triplets(ds, fs=fs, interpolate=False).compute(
+        use='slopes', dd=float(abs(theta_deg[1] - theta_deg[0])))
+    # compass -> math grid, plus the 180 deg going-to flip; the reflection is
+    # measure-preserving, so the directional density needs no Jacobian
+    theta_math = ((270.0 - np.asarray(theta_deg, float)) % 360.0 + 180.0) % 360.0 - 180.0
+    D = out['directional_distribution'].interp(
+        frequency=freqs, direction=theta_math, kwargs={'fill_value': np.nan}).values
+    D = np.where(np.isfinite(D), D, 0.0)
+    dth = np.radians(abs(theta_deg[1] - theta_deg[0]))
+    tot = D.sum(1, keepdims=True) * dth
+    D = np.divide(D, tot, out=np.full_like(D, np.nan), where=tot > 0)
+    return np.asarray(Sf, float)[:, None] * D
 
 
 def work(run_ind):
@@ -91,7 +159,10 @@ def work(run_ind):
     # (run not present in the reference timeseries) -> LH fallback (None)
     Sft_ref = np.nan_to_num(np.ma.filled(d['ref']['S_f_theta'][run_ind], 0.0))
     anchor = sftheta_sign_anchor(d['ref'], run_ind) if Sft_ref.sum() > 0 else None
-    # fixed aperture ladder, no reliability gate, de-piston solve field
+    # `from_field`/`seed_aperture` place gauges on a West/South-positive index
+    # frame (East = (cxp - j) dx) vs `build_eta_field`'s East = +j dx, negating
+    # the recovered wavevector. This pure +-k ambiguity is resolved by the sign
+    # anchor, so it is not corrected here.
     ds = MultiApertureArrays.from_field(eta, dx, water_depth_m, fs).compute(
         freqs=freqs, k_grid=k_grid, nu_grid=nu_grid,
         apertures=default_apertures(), n_staff=16, seed=20,
@@ -118,9 +189,26 @@ def work(run_ind):
     Fft, Fkd, Qnd = M['Fft'], M['Fkd'], M['Qnd']
     thbar, sigma, ref = M['thbar'], M['sigma'], M['sign_ref']
 
-    # onshore swell tiebreaker (flip the whole run 180 deg if its swell is offshore)
+    # traditional CSM directional spectra (EMEP/BDM/MLM) and the single-point
+    # EWDM triplet, on the same elevation field and direction grid
+    extra = {}
+    if csm_methods:
+        from subroutines.traditional_directional_spectra import (
+            traditional_directional_spectra)
+        trad = traditional_directional_spectra(
+            eta, dx, water_depth_m, fs, freqs, k_grid, M['theta'],
+            Sf=M['Sf'], kscan=True, methods=csm_methods,
+            sign_reference=M['thbar'])
+        for name, r in trad.items():
+            extra['Fft_' + name] = r['E_f']
+            extra['Fkd_' + name] = r['Psi_k']
+    extra['Fft_EWDM_triplet'] = _triplet_spectrum(eta, dx, fs, freqs, M['theta'],
+                                                  M['Sf'])
+
+    # onshore swell tiebreaker (flip the whole run 180 deg if its swell
+    # reads offshore); superseded by the curvature phase, off unless requested
     sb = freqs < swell_cut
-    if M['Sf'][sb].sum() > swell_frac * M['Sf'].sum():
+    if use_tiebreaker and M['Sf'][sb].sum() > swell_frac * M['Sf'].sum():
         th_sw = _ewmean(thbar[sb], M['Sf'][sb])
         if np.cos(np.radians(th_sw - onshore_dir)) < 0:
             roll = len(M['theta']) // 2
@@ -132,7 +220,8 @@ def work(run_ind):
 
     return run_ind, dict(Sf=M['Sf'], Fk=M['Fk'], Qn=M['Qn'], Fft=Fft, Fkd=Fkd,
                          Qnd=Qnd, thbar=thbar, sigma=sigma, sign_ref=ref,
-                         theta=M['theta'], var_eta=float(M['var_eta']))
+                         theta=M['theta'], var_eta=float(M['var_eta']),
+                         **extra)
 
 
 def main():
@@ -169,6 +258,12 @@ def main():
     Sg = nan_f4(nf, num_runs)
     Rf = nan_f4(nf, num_runs)
     var = nan_f4(num_runs)
+    # traditional CSM estimators and the EWDM triplet, one set per method
+    meth_f = [m for m in list(csm_methods) + ['EWDM_triplet']]
+    Fft_m = {m: nan_f4(nf, nd, num_runs) for m in meth_f}
+    Fkd_m = {m: nan_f4(nk, nd, num_runs) for m in csm_methods}
+    Tb_m = {m: nan_f4(nf, num_runs) for m in meth_f}
+    Sg_m = {m: nan_f4(nf, num_runs) for m in meth_f}
     for r, o in results.items():
         Fft[:, :, r] = o['Fft']
         Fkd[:, :, r] = o['Fkd']
@@ -180,12 +275,25 @@ def main():
         Sg[:, r] = o['sigma']
         Rf[:, r] = o['sign_ref']
         var[r] = o['var_eta']
+        for m in meth_f:
+            F = o.get('Fft_' + m)
+            if F is not None:
+                Fft_m[m][:, :, r] = F
+                Tb_m[m][:, r], Sg_m[m][:, r] = _dir_moments(F, th)
+        for m in csm_methods:
+            F = o.get('Fkd_' + m)
+            if F is not None:
+                Fkd_m[m][:, :, r] = F
 
     # direction -> radians CW from true North; F(f,theta) per-deg -> per-rad [m^2/Hz/rad];
     # F_k_d, Q_nu_d already Bjorkqvist (2019) jacobian-removed per-radian form
     th = np.radians(th)
     Fft *= 180.0 / np.pi
     Tb, Sg, Rf = np.radians(Tb), np.radians(Sg), np.radians(Rf)
+    # the CSM estimators and the triplet normalize over radians already, so only
+    # their direction-valued outputs convert here
+    for m in meth_f:
+        Tb_m[m], Sg_m[m] = np.radians(Tb_m[m]), np.radians(Sg_m[m])
 
     out = nc.Dataset(output_file, 'w')
     out.Conventions = 'CF-1.10'
@@ -201,7 +309,7 @@ def main():
                    'depiston_n=%g, slope_aperture=%s'
                    % (longwave_method, depiston_n, str(slope_aperture)))
     out.description = ('E-PSS multi-aperture elevation directional spectra; sign '
-                       'resolved by S_f_theta 3-D-FFT anchor + onshore swell tiebreaker. '
+                       'resolved by the curvature-phase long-wave inversion; '
                        'Direction in radians CW from true North. Polar k/nu directional '
                        'spectra are the Bjorkqvist et al. (2019) jacobian-removed form: '
                        'S_f = int F_f_d dtheta, F_k = int k F_k_d dtheta, '
@@ -231,6 +339,19 @@ def main():
     V('directional_spread', ('frequency', 'run'), Sg, units='radians')
     V('sign_reference', ('frequency', 'run'), Rf, units='radians clockwise from true North')
     V('variance', ('run',), var, units='m^2')
+    # traditional CSM estimators (EMEP/BDM/MLM) and the single-point EWDM
+    # triplet: same grids and conventions, method name appended
+    for m in meth_f:
+        V('F_f_d_' + m, ('frequency', 'direction', 'run'), Fft_m[m],
+          units='m^2/Hz/rad', long_name='Directional wave spectrum (%s)' % m)
+        V('mean_direction_' + m, ('frequency', 'run'), Tb_m[m],
+          units='radians clockwise from true North')
+        V('directional_spread_' + m, ('frequency', 'run'), Sg_m[m],
+          units='radians')
+    for m in csm_methods:
+        V('F_k_d_' + m, ('wavenumber', 'direction', 'run'), Fkd_m[m],
+          units='m^4/rad',
+          long_name='Directional wavenumber spectrum, native scan (%s)' % m)
     # time coordinate from the 0-189 chronological slope-field source
     fld = nc.Dataset(slope_field_file)
     if 'time' in fld.variables:
