@@ -1,21 +1,23 @@
-# Compile the single-triplet ("pseudo-buoy") directional estimator suite into one
-# ASIT2019 product on the E-PSS frequency/direction grid.
-#
-# The suite treats each run as a heave-pitch-roll buoy: one collocated
-# (elevation, east slope, north slope) time series taken as a 3 m disc average of
-# the E-PSS field, with the disc (jinc) response divided out of S(f). Every
-# estimator then steers on the transfer function h(theta) = [1, i k cos, i k sin]
-# rather than on gauge positions, so the array baseline never enters and the
-# low-frequency smearing that the virtual-gauge arrays carry is absent. The disc
-# response sets the support band (H^2 >= 0.1, i.e. f <= ~0.65 Hz); rows outside
-# it are masked, so the spectra integrate to S_f wherever they are defined and
-# render blank elsewhere.
-#
-# The per-run estimator files are produced by the companion wave-direction-
-# estimation repository; point EPSS_PSEUDOBUOY_DIR at its output tree to rebuild.
-# Absent that tree this script leaves any existing product in place and exits,
-# so a checkout without the companion repository still builds the rest of _data.
-# @author: nathanlaxague
+"""
+Compile the single-triplet ("pseudo-buoy") directional estimator suite into one
+ASIT2019 product on the E-PSS frequency/direction grid.
+
+The suite treats each run as a heave-pitch-roll buoy: one collocated
+(elevation, east slope, north slope) time series taken as a 3 m disc average of
+the E-PSS field, with the disc (jinc) response divided out of S(f). Every
+estimator then steers on the transfer function h(theta) = [1, i k cos, i k sin]
+rather than on gauge positions, so the array baseline never enters and the
+low-frequency smearing that the virtual-gauge arrays carry is absent. The disc
+response sets the support band (H^2 >= 0.1, i.e. f <= ~0.65 Hz); rows outside
+it are masked, so the spectra integrate to S_f wherever they are defined and
+render blank elsewhere.
+
+The per-run estimator files are produced by the companion wave-direction-
+estimation repository; point EPSS_PSEUDOBUOY_DIR at its output tree to rebuild.
+Absent that tree this script leaves any existing product in place and exits,
+so a checkout without the companion repository still builds the rest of _data.
+@author: nathanlaxague
+"""
 
 import os
 import sys

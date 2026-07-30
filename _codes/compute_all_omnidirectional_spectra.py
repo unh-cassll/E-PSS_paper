@@ -2,7 +2,6 @@
 Compute per-run omnidirectional elevation spectra for E-PSS gain treatments
 (no/lab/empirical) and the Riegl lidar reference. Units: m^2/Hz.
 
-Created: 2025-11-15; refactored: 2026-05-29
 @author: nathanlaxague
 """
 

@@ -2,16 +2,17 @@
 Resolution of the long-wave phase ambiguity from surface curvature, 2 x 2.
 
   top row     instantaneous phase of the reconstruction relative to the lidar
-  bottom row  long-wave elevation: lidar (black dashed), E-PSS before the
-              curvature fix (gray), after it (dark crimson)
+  bottom row  long-wave elevation: lidar (black dashed), E-PSS with the
+              projection phase (gray) and the curvature phase (dark crimson)
   columns     two long-wave directions. The projection phase takes
               cos(theta_f) = |S_E|/M, which is non-negative by construction, so
               it can only point east: it is already correct for an east-going
               sea (left) and inverted for a west-going one (right), where the
               curvature vote repairs it.
 
-The lidar is aligned to the POST-fix series only and the same lag is applied to
-the pre-fix trace, so the alignment cannot absorb the 180-degree flip.
+The lidar is aligned to the curvature-phase series only and the same lag is
+applied to the projection-phase trace, so the alignment cannot absorb the
+180-degree flip.
 
 @author: nathanlaxague
 """
@@ -106,7 +107,7 @@ ymax = 0.0
 
 for col, (run, (ta, tb)) in enumerate(CASES):
     d = prep(run)
-    # window centered where the post-fix trace is most energetic
+    # window centered where the curvature-phase trace is most energetic
     env_p = np.abs(signal.hilbert(d['post']))
     k = np.argmax(np.convolve(env_p, np.ones(int(WIN*fs))/(WIN*fs), 'same'))
     i0 = max(0, k - int(WIN*fs/2))

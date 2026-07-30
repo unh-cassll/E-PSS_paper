@@ -47,8 +47,8 @@ freqs, k_grid, nu_grid = epss_ewdm_grids(dx)
 
 # Onshore swell tiebreaker: ASIT is 3 km south of Martha's Vineyard, so long
 # swell propagates onshore (northward); flip a swell-dominated run that reads
-# offshore. Superseded by the curvature phase in `fourier_slope_projection`;
-# off by default, EPSS_TIEBREAK=1 restores it.
+# offshore. The curvature phase in `fourier_slope_projection` fixes the sign
+# directly, so this runs only under EPSS_TIEBREAK=1.
 onshore_dir = 0.0
 swell_cut = 0.16
 swell_frac = 0.15
@@ -205,8 +205,8 @@ def work(run_ind):
     extra['Fft_EWDM_triplet'] = _triplet_spectrum(eta, dx, fs, freqs, M['theta'],
                                                   M['Sf'])
 
-    # onshore swell tiebreaker (flip the whole run 180 deg if its swell
-    # reads offshore); superseded by the curvature phase, off unless requested
+    # onshore swell tiebreaker: flip the whole run 180 deg if its swell reads
+    # offshore. Off unless EPSS_TIEBREAK=1
     sb = freqs < swell_cut
     if use_tiebreaker and M['Sf'][sb].sum() > swell_frac * M['Sf'].sum():
         th_sw = _ewmean(thbar[sb], M['Sf'][sb])

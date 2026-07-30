@@ -1,6 +1,8 @@
-# Compare mean wave direction and directional spreading sigma_theta(f) across six
-# E-PSS directional estimators against the ADCP (IMLM) reference. Binned by U10.
-# @author: nathanlaxague
+"""
+Compare mean wave direction and directional spreading sigma_theta(f) across six
+E-PSS directional estimators against the ADCP (IMLM) reference. Binned by U10.
+@author: nathanlaxague
+"""
 
 import numpy as np
 import xarray as xr

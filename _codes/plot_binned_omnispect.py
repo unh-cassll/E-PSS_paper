@@ -1,10 +1,12 @@
-# Plot omnidirectional elevation and saturation spectra in frequency and
-# wavenumber, binned by U10. Two techniques (integrated EWDM directional spectra
-# and full-frame slope spectra, slope-to-elevation per axis) are drawn solid on
-# their trusted side of a per-axis boundary and faded beyond. Saturation panels
-# use the Bjorkqvist et al. (2019, JGR) dimensionless forms ((2pi f)^5 g^-2 F(f),
-# k^3 F(k)) and universal constants (2.5e-2, 5.8e-3).
-# @author: nathanlaxague
+"""
+Plot omnidirectional elevation and saturation spectra in frequency and
+wavenumber, binned by U10. Two techniques (integrated EWDM directional spectra
+and full-frame slope spectra, slope-to-elevation per axis) are drawn solid on
+their trusted side of a per-axis boundary and faded beyond. Saturation panels
+use the Bjorkqvist et al. (2019, JGR) dimensionless forms ((2pi f)^5 g^-2 F(f),
+k^3 F(k)) and universal constants (2.5e-2, 5.8e-3).
+@author: nathanlaxague
+"""
 
 import os
 import numpy as np

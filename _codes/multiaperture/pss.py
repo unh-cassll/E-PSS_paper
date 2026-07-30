@@ -223,10 +223,10 @@ def fourier_slope_projection(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, 
     Donelan (2006). The phase comes from the frame-mean curvature trace,
     arg{-F[lap]}, which is sign-unambiguous (see `_curvature_phase`).
 
-    phase_source='projection' restores the original per-frequency signed slope
-    projection, eta = irfft(A * exp(i*angle(+1j*(cos*Sx + sin*Sy)))) with
-    cos=|Sx|/m and sin=(|Sy|/m)*sign(Re(Sy conj Sx)). That form is ambiguous by
-    180 deg -- it is retained only to reproduce published results."""
+    phase_source='projection' takes the phase from the per-frequency signed
+    slope projection instead, eta = irfft(A * exp(i*angle(+1j*(cos*Sx +
+    sin*Sy)))) with cos=|Sx|/m and sin=(|Sy|/m)*sign(Re(Sy conj Sx)). That form
+    is ambiguous by 180 deg."""
     ny, nx = SxF.shape[:2]
     d_px = nx if slope_aperture is None else min(slope_aperture, nx)
     disc = _disc_mask(ny, nx, d_px)

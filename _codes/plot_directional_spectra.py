@@ -1,6 +1,8 @@
-# Plot directional wave spectra (polar and Cartesian) for a single run,
-# comparing ADCP/IMLM and E-PSS/EWDM estimates.
-# @author: nathanlaxague
+"""
+Plot directional wave spectra (polar and Cartesian) for a single run,
+comparing ADCP/IMLM and E-PSS/EWDM estimates.
+@author: nathanlaxague
+"""
 
 import numpy as np
 import xarray as xr

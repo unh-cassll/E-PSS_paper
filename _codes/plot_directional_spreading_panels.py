@@ -1,19 +1,21 @@
-# Plot the directional spreading function D(theta|f) for a single run as a
-# 2 x 3 panel comparison: the ADCP reference and the multi-aperture wavelet
-# estimate on the top row, then the four estimators driven by ONE collocated
-# (elevation, east slope, north slope) triplet -- the heave-pitch-roll buoy
-# observable, taken here as a 3 m disc average of the E-PSS field.
-# Inverting these estimators on a virtual-gauge array seeded across the field
-# instead smears their low-frequency lobes, the array baseline being short
-# against a swell wavelength. Steering the triplet on the transfer function
-# h(theta) = [1, i k cos, i k sin] removes the baseline from the problem and the
-# lobes tighten accordingly, at the cost of a band limit: the disc response
-# confines the triplet to f <~ 0.65 Hz.
-# Panel order puts IMLM directly beneath the ADCP, which inverts its own
-# cross-spectral matrix the same way.
-# Every panel carries the direct 3-D-FFT spectrum above the splice cut, so each
-# estimator is read against the same reference over the band it does not cover.
-# @author: nathanlaxague
+"""
+Plot the directional spreading function D(theta|f) for a single run as a
+2 x 3 panel comparison: the ADCP reference and the multi-aperture wavelet
+estimate on the top row, then the four estimators driven by ONE collocated
+(elevation, east slope, north slope) triplet -- the heave-pitch-roll buoy
+observable, taken here as a 3 m disc average of the E-PSS field.
+Inverting these estimators on a virtual-gauge array seeded across the field
+instead smears their low-frequency lobes, the array baseline being short
+against a swell wavelength. Steering the triplet on the transfer function
+h(theta) = [1, i k cos, i k sin] removes the baseline from the problem and the
+lobes tighten accordingly, at the cost of a band limit: the disc response
+confines the triplet to f <~ 0.65 Hz.
+Panel order puts IMLM directly beneath the ADCP, which inverts its own
+cross-spectral matrix the same way.
+Every panel carries the direct 3-D-FFT spectrum above the splice cut, so each
+estimator is read against the same reference over the band it does not cover.
+@author: nathanlaxague
+"""
 
 import numpy as np
 import xarray as xr

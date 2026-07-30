@@ -1,6 +1,8 @@
-# Plot slope distribution statistics (MSS and Gram-Charlier coefficients)
-# binned by U10, compared against Cox & Munk [1954] and Breon & Henriot [2006].
-# @author: nathanlaxague
+"""
+Plot slope distribution statistics (MSS and Gram-Charlier coefficients)
+binned by U10, compared against Cox & Munk [1954] and Breon & Henriot [2006].
+@author: nathanlaxague
+"""
 
 import numpy as np
 import xarray as xr
