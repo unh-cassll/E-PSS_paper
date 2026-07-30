@@ -17,6 +17,22 @@ from eta_field_recon.wavelet_core import (lindisp_with_current, aperture_transfe
 L_FOV = L_FOV_M                     # E-PSS imaged-patch side length [m]
 GRAV = 9.81
 
+# Rotation from the reduced field's array axes onto the compass. The reduced
+# fields are stored on the CAMERA IMAGE grid (`_earth_components` rotates the
+# polarimetric components into (east, north) but leaves the array indices
+# alone), so index-differentiating operators work in the image frame. The row
+# axis lies along the camera look azimuth and the column axis 90 deg clockwise:
+# a proper rotation of CAMERA_AZ from (east, north) onto (column, row). This is
+# the physical mounting azimuth, not a fitted parameter.
+#
+# `_curvature_trace` needs it too and does not apply it: the slope-gradient
+# tensor trace is rotation-invariant only when components and axes rotate
+# together, which they do not here. Components rotated by phi but differentiated
+# along the image axes give cos(phi) div(s) - sin(phi) curl(s); cos(190 deg) =
+# -0.98, so it returns nearly MINUS the Laplacian and its sign reference is pi
+# out.
+CAMERA_AZ_DEG = 190.0           # ASIT deployment look azimuth [deg true]
+
 
 def _highpass_1d(x, fs, fc, width_oct=0.5):
     """Smooth (log-tanh) temporal high-pass of a 1-D series above corner fc [Hz]."""
@@ -63,10 +79,101 @@ def _direct_complete_amplitude(sE, sN, depth, fs, diam_m, jinc=True,
     return A, Sx, Sy, T
 
 
+def _image_axis_components(SxF, SyF, cam_az_deg=CAMERA_AZ_DEG):
+    """Earth-referenced slope components resolved onto the camera image axes.
+
+    The stored components are (east, north) but the array indices run along the
+    camera row and column axes, so a derivative taken with respect to an index
+    only means what it says once the components are expressed in that same
+    frame. Returns (s_column, s_row)."""
+    col = np.radians(cam_az_deg + 90.0)
+    row = np.radians(cam_az_deg)
+    SxF = np.asarray(SxF, float)
+    SyF = np.asarray(SyF, float)
+    return (SxF * np.sin(col) + SyF * np.cos(col),
+            SxF * np.sin(row) + SyF * np.cos(row))
+
+
+def _curvature_trace(SxF, SyF, L, cam_az_deg=CAMERA_AZ_DEG):
+    """Frame-mean surface curvature trace lap(t) = div(s) [1/m].
+
+    Least-squares slope of each component against its own coordinate over the
+    whole frame (all pixels, unlike an edge difference). For a wave of
+    wavenumber k the surface obeys lap(eta) = -k^2 eta, so this trace is exactly
+    anti-phase with the elevation -- a sign-unambiguous phase reference, from
+    the in-frame slope variation that the disc-mean time series discards.
+
+    The components are resolved onto the image axes first. A divergence is
+    rotation-invariant only when the components and the axes rotate TOGETHER;
+    this expression pairs a component subscript with an axis subscript, so it
+    needs both frames to agree. Differentiating the EARTH components along the
+    IMAGE axes returns cos(phi) div(s) - sin(phi) curl(s) instead, and with
+    phi = CAMERA_AZ the leading factor is -0.98 -- very nearly MINUS the
+    Laplacian, which puts the sign reference pi out and inverts the piston."""
+    ny, nx = SxF.shape[:2]
+    dx = L / nx
+    s_col, s_row = _image_axis_components(SxF, SyF, cam_az_deg)
+    ex = (np.arange(nx) - (nx - 1) / 2.0) * dx
+    ey = (np.arange(ny) - (ny - 1) / 2.0) * dx
+    wx = ex / (nx * np.sum(ex ** 2))              # LS ramp projector, per row
+    wy = ey / (ny * np.sum(ey ** 2))              # ... per column
+    return (np.einsum('j,ijt->t', wx, s_col) * nx
+            + np.einsum('i,ijt->t', wy, s_row) * ny)
+
+
+def _curvature_phase(SxF, SyF, Sx, Sy, L, T, fs, tukey_alpha=0.25,
+                     smooth_hz=0.05, cam_az_deg=CAMERA_AZ_DEG):
+    """Per-frequency elevation phase: the slope projection, with its sign fixed
+    by the in-frame surface curvature.
+
+    The projection phase arg{i (cos th_f Sx + sin th_f Sy)} is well determined
+    -- the disc-mean slope carries most of the long-wave signal -- but it is
+    ambiguous by 180 deg, because cos(th_f) = |Sx|/m is non-negative by
+    construction and so th_f can never point west. Only the SIGN is in doubt,
+    and only the sign is taken from the curvature.
+
+    grad^2 eta = -k^2 eta puts the curvature exactly out of phase with the
+    elevation, so arg{-F[lap]} settles that sign. Taking the curvature phase
+    wholesale instead would import its noise: curvature scales as k^2 eta, and
+    across a 2.9 m frame at 0.1 Hz it is second-order small, so a per-bin
+    curvature phase wanders and drags the swell into the wrong hemisphere.
+    Here the curvature only votes.
+
+    The vote is amplitude-weighted and smoothed over `smooth_hz` in frequency
+    before its sign is taken, so bins with no curvature signal inherit the
+    decision of neighbors that have one. That is legitimate because the sign is
+    not random per bin: it flips only where the true direction crosses the
+    north-south axis, which a veering sea does a few times at most.
+
+    `cam_az_deg` reaches `_curvature_trace`, which needs it to resolve the
+    stored earth components onto the image axes. Pass 0 for synthetic fields
+    laid out in the earth frame."""
+    win = tukey(T, tukey_alpha)
+    Lap = np.fft.rfft(signal.detrend(
+        _curvature_trace(SxF, SyF, L, cam_az_deg)) * win)
+
+    m = np.sqrt(np.abs(Sx) ** 2 + np.abs(Sy) ** 2) + 1e-30
+    rel = np.sign(np.real(Sy * np.conj(Sx)))
+    rel = np.where(rel == 0, 1.0, rel)
+    phi = np.angle(1j * ((np.abs(Sx) / m) * Sx + (np.abs(Sy) / m) * rel * Sy))
+
+    vote = np.abs(Lap) * np.exp(1j * (np.angle(-Lap) - phi))
+    nb = max(3, int(round(smooth_hz * T / fs)) | 1)     # odd window
+    kern = np.ones(nb) / nb
+    smooth = np.convolve(vote, kern, mode='same')
+    return phi + np.pi * (np.real(smooth) < 0.0)
+
+
 def wavelet_slope_projection(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, jinc=True,
-                             hp_fmin=0.08, hp_width_oct=0.25, tukey_alpha=0.25):
+                             hp_fmin=0.08, hp_width_oct=0.25, tukey_alpha=0.25,
+                             phase_source='curvature',
+                             cam_az_deg=CAMERA_AZ_DEG):
     """Long-wave eta(t): wavelet (CWT) signed slope projection for the phase, with the
     same directionally-complete direct amplitude as fourier_slope_projection.
+
+    Carries the same 180-deg ambiguity as the Fourier projection -- per (f, t) the
+    cosine is |Wsx|/m, again non-negative -- so phase_source defaults to
+    'curvature' here too; 'projection' restores the wavelet phase.
 
     Disc-mean slopes -> Morlet CWT. Per (f, t): direction cos=|Wsx|/m, sin=(|Wsy|/m)*
     sign(Re(Wsy conj Wsx)); elevation coeffs Weta = +1j*(cos*Wsx + sin*Wsy)/k(f),
@@ -78,8 +185,9 @@ def wavelet_slope_projection(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, 
     d_px = nx if slope_aperture is None else min(slope_aperture, nx)
     disc = _disc_mask(ny, nx, d_px)
     sE, sN = SxF[disc].mean(0), SyF[disc].mean(0)
-    A, _, _, T = _direct_complete_amplitude(sE, sN, depth, fs, L * d_px / nx,
-                                            jinc, hp_fmin, hp_width_oct, tukey_alpha)
+    A, Sx, Sy, T = _direct_complete_amplitude(sE, sN, depth, fs, L * d_px / nx,
+                                              jinc, hp_fmin, hp_width_oct,
+                                              tukey_alpha)
     fcwt = np.linspace(0.05, 2.0, 80)
     win = tukey(T, tukey_alpha)
     Wsx = _ewdm_cwt(signal.detrend(sE) * win, freqs=fcwt, fs=fs).values
@@ -94,32 +202,47 @@ def wavelet_slope_projection(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, 
     Weta = np.where(np.isfinite(Weta), Weta, 0.0)
     bp = 1.0 / (1.0 + np.exp(-(np.log2(fcwt) - np.log2(hp_fmin)) / hp_width_oct))
     eta_krog = np.real(_ewdm_icwt(Weta * bp[:, None], freqs=fcwt, fs=fs, per_scale=True))
-    phase = np.angle(np.fft.rfft(eta_krog - eta_krog.mean()))
+    if phase_source == 'projection':
+        phase = np.angle(np.fft.rfft(eta_krog - eta_krog.mean()))
+    else:
+        phase = _curvature_phase(SxF, SyF, Sx, Sy, L, T, fs, tukey_alpha,
+                                 cam_az_deg=cam_az_deg)
     eta = np.fft.irfft(A * np.exp(1j * phase), n=T)
     return eta - eta.mean()
 
 
 def fourier_slope_projection(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, jinc=True,
-                             hp_fmin=0.08, hp_width_oct=0.25, tukey_alpha=0.25):
-    """Long-wave eta(t) by per-frequency signed slope projection (default long wave).
+                             hp_fmin=0.08, hp_width_oct=0.25, tukey_alpha=0.25,
+                             phase_source='curvature',
+                             cam_az_deg=CAMERA_AZ_DEG):
+    """Long-wave eta(t): directionally-complete direct amplitude with a phase from
+    the in-frame surface curvature (default long wave).
 
-    Disc-mean slope rffts. Per frequency: direction cos=|Sx|/m, sin=(|Sy|/m)*
-    sign(Re(Sy conj Sx)) (180-deg ambiguity from the channels' relative phase); the
-    projection carries only the phase, the directionally-complete direct amplitude the
-    magnitude: eta = irfft(A * exp(i*angle(+1j*(cos*Sx + sin*Sy)))). The Fourier-
-    amplitude form of the directional estimator of Krogstad, Magnusson & Donelan (2006)
-    (their wavelet method puts wavelet amplitudes in place of these Fourier amplitudes)."""
+    Disc-mean slope rffts set the magnitude, A(f) = sqrt(|Sx|^2+|Sy|^2)/k, the
+    Fourier-amplitude form of the directional estimator of Krogstad, Magnusson &
+    Donelan (2006). The phase comes from the frame-mean curvature trace,
+    arg{-F[lap]}, which is sign-unambiguous (see `_curvature_phase`).
+
+    phase_source='projection' restores the original per-frequency signed slope
+    projection, eta = irfft(A * exp(i*angle(+1j*(cos*Sx + sin*Sy)))) with
+    cos=|Sx|/m and sin=(|Sy|/m)*sign(Re(Sy conj Sx)). That form is ambiguous by
+    180 deg -- it is retained only to reproduce published results."""
     ny, nx = SxF.shape[:2]
     d_px = nx if slope_aperture is None else min(slope_aperture, nx)
     disc = _disc_mask(ny, nx, d_px)
     A, Sx, Sy, T = _direct_complete_amplitude(SxF[disc].mean(0), SyF[disc].mean(0),
                                               depth, fs, L * d_px / nx, jinc,
                                               hp_fmin, hp_width_oct, tukey_alpha)
-    m = np.sqrt(np.abs(Sx) ** 2 + np.abs(Sy) ** 2) + 1e-30
-    rel = np.sign(np.real(Sy * np.conj(Sx)))
-    rel = np.where(rel == 0, 1.0, rel)
-    carrier = 1j * ((np.abs(Sx) / m) * Sx + (np.abs(Sy) / m) * rel * Sy)
-    eta = np.fft.irfft(A * np.exp(1j * np.angle(carrier)), n=T)
+    if phase_source == 'projection':
+        m = np.sqrt(np.abs(Sx) ** 2 + np.abs(Sy) ** 2) + 1e-30
+        rel = np.sign(np.real(Sy * np.conj(Sx)))
+        rel = np.where(rel == 0, 1.0, rel)
+        carrier = 1j * ((np.abs(Sx) / m) * Sx + (np.abs(Sy) / m) * rel * Sy)
+        phase = np.angle(carrier)
+    else:
+        phase = _curvature_phase(SxF, SyF, Sx, Sy, L, T, fs, tukey_alpha,
+                                 cam_az_deg=cam_az_deg)
+    eta = np.fft.irfft(A * np.exp(1j * phase), n=T)
     return eta - eta.mean()
 
 
@@ -147,7 +270,8 @@ def anchored_freq_recolor(eta_long, Z, fs, freqs, fc=0.55, band=(0.5, 0.6),
 
 
 def build_eta_field(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, depiston_n=None,
-                    return_components=False, longwave_method='fourier'):
+                    return_components=False, longwave_method='fourier',
+                    cam_az_deg=CAMERA_AZ_DEG):
     """Combined camera elevation field eta(y,x,t) [m]: long wave (Fourier
     slope-projection by default, or wavelet) + per-frame g2s short-wave field.
 
@@ -173,7 +297,8 @@ def build_eta_field(SxF, SyF, depth, fs, L=L_FOV, slope_aperture=None, depiston_
     xg = np.arange(nx) * dx
     yg = np.arange(ny) * dx
     proj = wavelet_slope_projection if longwave_method == 'wavelet' else fourier_slope_projection
-    eta_long = proj(SxF, SyF, depth, fs, L, slope_aperture)
+    eta_long = proj(SxF, SyF, depth, fs, L, slope_aperture,
+                    cam_az_deg=cam_az_deg)
     Sx0 = SxF - SxF.mean(axis=2, keepdims=True)
     Sy0 = SyF - SyF.mean(axis=2, keepdims=True)
     Z = np.empty((ny, nx, T))
