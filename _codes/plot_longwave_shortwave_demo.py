@@ -1,7 +1,8 @@
 """
 E-PSS elevation-reconstruction demo: long-wave path (Fourier slope projection on
 disc-averaged slope timeseries) and short-wave path (per-frame g2s surface integration).
-Stacked layout: slope timeseries -> long-wave eta(t) -> g2s short-wave eta(x,y) snapshot.
+Layout: slope timeseries and long-wave eta(t) stacked at left, g2s short-wave
+eta(x,y) snapshot at right.
 """
 
 import numpy as np
@@ -69,9 +70,13 @@ slope_lim = 0.4
 Zsnap = Z[:, :, i_snap]
 vZ = np.percentile(np.abs(Zsnap), 99)          # symmetric coolwarm limit about eta = 0
 
-fig = plt.figure(figsize=(fullwidth/2, fullwidth*1.05), constrained_layout=True)
-gs = fig.add_gridspec(3, 1, height_ratios=[0.5, 0.5, 1.05])
-ax0, ax1, ax2 = (fig.add_subplot(gs[i]) for i in range(3))
+# full width: the two timeseries stacked on the left, the field snapshot on the
+# right spanning both rows
+fig = plt.figure(figsize=(fullwidth, fullwidth*0.5), constrained_layout=True)
+gs = fig.add_gridspec(2, 2, width_ratios=[1.4, 1])
+ax0 = fig.add_subplot(gs[0, 0])
+ax1 = fig.add_subplot(gs[1, 0])
+ax2 = fig.add_subplot(gs[:, 1])
 
 def panel_tag(ax, tag):
     ax.text(0.07, 0.90, tag, transform=ax.transAxes, fontsize=fsize, va='center', ha='center',
@@ -91,7 +96,7 @@ panel_tag(ax0, '(a)')
 # long-wave elevation (Fourier slope projection) with the phase-aligned lidar overlay
 ax1.plot(tw, eta_long[i0:i1], color=color_list[2], lw=2, label='E-PSS')
 ax1.plot(tw, lidar_shift[i0:i1], 'k--', lw=2, label=r'lidar') #label=r'lidar (%+.1f s)' % (lag/fs))
-ax1.set_ylabel(r'long wave $\eta$ [m]')
+ax1.set_ylabel(r'$\eta_{\rm long}$ [m]')
 ax1.set_xlim(0, 10)
 ax1.set_ylim(-1.2, 1.2)
 ax1.set_xlabel('t [s]')
@@ -105,7 +110,7 @@ ax2.set_aspect('equal')
 ax2.set_xlabel('x [m]')
 ax2.set_ylabel('y [m]')
 cb = fig.colorbar(im, ax=ax2, orientation='horizontal', location='top', fraction=0.047, pad=0.02)
-cb.set_label(r'short wave $\eta$ [m], t = %.0f s' % t_snap)
+cb.set_label(r'$\eta_{intermediate}$ [m], t = %.0f s' % t_snap)
 panel_tag(ax2, '(c)')
 
 plt.savefig(figpath + 'longwave_shortwave_demo_stacked.pdf', bbox_inches='tight', dpi=300)

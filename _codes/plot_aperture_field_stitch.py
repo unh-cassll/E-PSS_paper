@@ -1,8 +1,8 @@
 """
 Multi-aperture g2s elevation field and stitched omnidirectional saturation spectrum.
-Left 2x2 quad: eta(x,y) through four aperture sizes (A0 broadest -> A7 tightest)
-with virtual staff seeds; right panel: per-aperture k^3 F(k), stitched EWDM
-composite, and direct full-frame k^3 F(k) reference.
+Top 2x2 quad: eta(x,y) through four aperture sizes (A0 broadest -> A7 tightest)
+with virtual staff seeds; bottom panel: per-aperture k^3 F(k), stitched EWDM
+composite, and direct full-frame k^3 F(k) reference. Single-column layout.
 
 Results cached to aperture_field_stitch.nc (~100 s to recompute); set recompute=True
 to regenerate. Estimator config matches compute_all_directional_spectra.
@@ -119,9 +119,9 @@ for a in range(len(ap_names)):
     ii, jj, px, py, bmax = seed_aperture(ny, nx, dx, int(ap_ext[a]), 16, a)
     gauges.append((ii, jj))
 
-fig = plt.figure(figsize=(fullwidth, fullwidth*0.6), constrained_layout=True)
-# left 50%: 2x2 aperture quad; right 50%: k^3 F(k) spectrum spanning both rows
-gs = fig.add_gridspec(2, 3, width_ratios=[1, 1, 2])
+# single column: 2x2 aperture quad on top, k^3 F(k) spectrum beneath it
+fig = plt.figure(figsize=(fullwidth/2, fullwidth*1.1), constrained_layout=True)
+gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1.45])
 
 def panel_tag(ax, tag):
     ax.text(0.08, 0.92, tag, transform=ax.transAxes, fontsize=fsize, va='center', ha='center',
@@ -152,9 +152,9 @@ for (r, c), idx, col, tag in zip(quad_cells, show_idx, show_cols, tags):
     ax.set_xlabel('x [m]') if r == 1 else ax.set_xticklabels([])
     panel_tag(ax, tag)
 fig.colorbar(im, ax=fax, location='top', orientation='horizontal',
-             label=r'short wave $\eta$ [m]', shrink=0.9, aspect=40, pad=0.02)
+             label=r'$\eta_{\rm intermediate}$ [m]', shrink=0.9, aspect=40, pad=0.02)
 
-ax = fig.add_subplot(gs[:, 2])                       # panel (e): k^3 F(k), right 50%
+ax = fig.add_subplot(gs[2, :])                       # panel (e): k^3 F(k), full width
 k3 = k_grid**3
 # per-aperture k^3 F(k): solid within the aperture's deposited band, dotted beyond
 for idx, col in zip(show_idx, show_cols):
@@ -169,18 +169,9 @@ ax.loglog(k_sl, Bk_direct, 'k--', lw=2.5, label=r'direct')
 ax.set_xlim(5e-2, 5e1)
 ax.set_ylim(1e-4, 1e-1)
 ax.set_xlabel(r'k [rad m$^{-1}$]'); ax.set_ylabel(r'k$^3$F(k) [rad]')
-ax.yaxis.set_label_position('right')
-ax.yaxis.tick_right()
 ax.grid(which='major', ls='-', lw=0.75); ax.grid(which='minor', ls=':', lw=0.75)
-ax.legend(fontsize=fsize, loc='lower right', ncol=1)
+ax.legend(fontsize=fsize-2, loc='lower right', ncol=2)
 panel_tag(ax, '(e)')
 
-# match spectrum panel height to quad block; freeze layout so the override survives savefig
-fig.draw_without_rendering()
-quad_top = max(a.get_position().y1 for a in fax)
-quad_bot = min(a.get_position().y0 for a in fax)
-sp = ax.get_position()
-fig.set_layout_engine('none')
-ax.set_position([sp.x0, quad_bot, sp.width, quad_top - quad_bot])
 
 plt.savefig(figpath + 'aperture_field_stitch.pdf', bbox_inches='tight', dpi=300)
