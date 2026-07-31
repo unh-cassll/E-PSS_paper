@@ -100,6 +100,9 @@ def figure_style(title_fontsize=10, label_fontsize=10, tick_fontsize=10):
     plt.rcParams['axes.prop_cycle'] = plt.cycler(color=color_list)
 
     plt.rcParams.update({
+        # Embed TrueType rather than Type 3; IEEE PDF eXpress rejects Type 3
+        'pdf.fonttype': 42,
+        'ps.fonttype': 42,
         'axes.grid': True,
         'font.size': fsize,
         'axes.titlesize': title_fontsize,
