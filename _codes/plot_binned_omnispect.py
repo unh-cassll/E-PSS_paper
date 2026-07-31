@@ -152,7 +152,7 @@ colors = [cmap(j) for j in np.linspace(0,1, len(U_centers))]
 
 # Axis limits
 f_lims = [1e-2,2e1]
-Ff_lims = [1e-10,1e1]
+Ff_lims = [1e-12,1e1]
 Bf_lims = [1e-4,2e-1]
 
 k_lims = [1e-2,1e3]
