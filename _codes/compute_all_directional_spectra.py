@@ -2,8 +2,9 @@
 Compute per-run E-PSS multi-aperture elevation directional spectra (f, k, nu)
 from the earth-referenced PSS slope fields. Slope fields -> camera elevation
 field (Fourier slope-projection long wave + per-frame g2s) -> multi-aperture
-virtual-staff EWDM estimator, with the 180-deg sign resolved by the direct
-S_f_theta 3-D-FFT anchor and an onshore swell tiebreaker.
+virtual-staff EWDM estimator (SmallFOVArrays), with the 180-deg sign resolved
+per frequency by the direct S_f_theta 3-D-FFT anchor and a sub-anchor onshore
+swell tiebreaker.
 
 @author: nathanlaxague
 """
@@ -26,7 +27,7 @@ path = '../_data/'
 slope_field_file = path + os.environ.get('EPSS_FLD', 'ASIT2019_slope_fields_reduced.nc')
 output_file = path + os.environ.get('EPSS_OUT', 'ASIT2019_EPSS_directional_spectra.nc')
 fs, water_depth_m, num_samples, num_runs = FS_HZ, WATER_DEPTH_M, NUM_SAMPLES, NUM_RUNS
-# de-piston corner k_n = 2*pi/(n*L); n=2.0 lifts the high-wind FOV-scale F(k) plateau
+# de-piston corner k_n = 2*pi/(n*L); n=1.5 lifts the high-wind FOV-scale F(k) plateau
 depiston_n = float(os.environ.get('EPSS_DEPISTON_N', 1.5))
 # disc [px] for the long-wave FOV-mean tilt (None = full frame)
 _sa = os.environ.get('EPSS_SLOPE_APERTURE', 'none')
@@ -53,6 +54,17 @@ onshore_dir = 0.0
 swell_cut = 0.16
 swell_frac = 0.15
 use_tiebreaker = os.environ.get('EPSS_TIEBREAK', '0') not in ('0', '', 'false')
+
+# Sub-anchor onshore-swell tiebreaker: below the anchor coverage floor the
+# propagation sign is unobservable (3-D-FFT resultant < rmin for long swell)
+# and ASIT has no southward long-wave fetch. A band reading more than
+# subanchor_off_deg from onshore flips 180 deg via the SmallFOVArrays
+# sign_prior; CSM estimators inherit through thbar, the triplet flips on its
+# own reading. Default on; EPSS_SUBANCHOR_TIEBREAK=0 disables. Band floor =
+# long-wave high-pass corner.
+use_subanchor_tb = os.environ.get('EPSS_SUBANCHOR_TIEBREAK', '1') not in ('0', '', 'false')
+subanchor_off_deg = 120.0
+subanchor_fmin = 0.08
 
 # traditional cross-spectral-matrix estimators run alongside EWDM on the same
 # elevation field; '' disables them
@@ -138,8 +150,7 @@ def _triplet_spectrum(eta, dx, fs, freqs, theta_deg, Sf):
 
 def work(run_ind):
     from multiaperture import (build_eta_field, sftheta_sign_anchor,
-                               anchored_freq_recolor)
-    from ewdm import MultiApertureArrays
+                               anchored_freq_recolor, SmallFOVArrays)
     from ewdm.multiaperture import default_apertures
     d = _ds()
     se = np.ma.filled(d['fld']['slope_east'][run_ind][..., :num_samples], np.nan)
@@ -159,11 +170,26 @@ def work(run_ind):
     # (run not present in the reference timeseries) -> LH fallback (None)
     Sft_ref = np.nan_to_num(np.ma.filled(d['ref']['S_f_theta'][run_ind], 0.0))
     anchor = sftheta_sign_anchor(d['ref'], run_ind) if Sft_ref.sum() > 0 else None
+    # sub-anchor tiebreaker as a fold-reference prior: samples inherit the flip
+    # at their source frequency row, keeping F(f,theta), F(k,theta) and
+    # Q(nu,theta) consistent
+    sign_prior = None
+    if use_subanchor_tb and anchor is not None:
+        adirs = np.asarray(anchor[1], float)
+        okb = np.isfinite(adirs)
+        if okb.any():
+            f_lo = float(np.asarray(anchor[0], float)[okb].min())
+            # swell prior applies only when the band spans the swell band
+            if f_lo >= swell_cut:
+                sign_prior = (onshore_dir, (subanchor_fmin, f_lo),
+                              subanchor_off_deg)
     # `from_field`/`seed_aperture` place gauges on a West/South-positive index
     # frame (East = (cxp - j) dx) vs `build_eta_field`'s East = +j dx, negating
     # the recovered wavevector. This pure +-k ambiguity is resolved by the sign
     # anchor, so it is not corrected here.
-    ds = MultiApertureArrays.from_field(eta, dx, water_depth_m, fs).compute(
+    sp = SmallFOVArrays.from_field(eta, dx, water_depth_m, fs)
+    sp.sign_prior = sign_prior
+    ds = sp.compute(
         freqs=freqs, k_grid=k_grid, nu_grid=nu_grid,
         apertures=default_apertures(), n_staff=16, seed=20,
         solve_eta=eta_solve, reliability_gate=None, sign_anchor=anchor)
@@ -217,6 +243,20 @@ def work(run_ind):
             Qnd = np.roll(Qnd, roll, axis=1)
             thbar = (thbar + 180.0) % 360.0
             ref = (ref + 180.0) % 360.0
+
+    # the triplet does not fold to thbar, so the sub-anchor tiebreaker applies
+    # to it separately (f-space only; no k product)
+    if sign_prior is not None:
+        pdir, (pf1, pf2), poff = sign_prior
+        sub = (freqs >= pf1) & (freqs < pf2)
+        F = np.asarray(extra['Fft_EWDM_triplet'], float)
+        th_grid = np.radians(M['theta'])
+        c = (np.nan_to_num(F)[sub] * np.cos(th_grid)[None, :]).sum()
+        s = (np.nan_to_num(F)[sub] * np.sin(th_grid)[None, :]).sum()
+        if (c != 0.0 or s != 0.0) and np.cos(np.radians(
+                np.degrees(np.arctan2(s, c)) - pdir)) < np.cos(np.radians(poff)):
+            F[sub] = np.roll(F[sub], len(M['theta']) // 2, axis=1)
+            extra['Fft_EWDM_triplet'] = F
 
     return run_ind, dict(Sf=M['Sf'], Fk=M['Fk'], Qn=M['Qn'], Fft=Fft, Fkd=Fkd,
                          Qnd=Qnd, thbar=thbar, sigma=sigma, sign_ref=ref,
@@ -299,17 +339,23 @@ def main():
     out.Conventions = 'CF-1.10'
     out.title = 'ASIT 2019 E-PSS multi-aperture EWDM elevation directional wave spectra'
     out.institution = 'University of New Hampshire'
-    out.source = ('ewdm.MultiApertureArrays multi-aperture wavelet directional method '
-                  'on virtual-staff arrays seeded into camera slope-derived elevation '
-                  'fields (build_eta_field: %s slope-projection long wave + g2s short '
-                  'wave, depiston_n=%g; apertures=default_apertures, reliability_gate=None)'
+    out.source = ('multiaperture.SmallFOVArrays (ewdm.MultiApertureArrays with E-PSS '
+                  'per-frequency sign resolution) on virtual-staff arrays seeded into '
+                  'camera slope-derived elevation fields (build_eta_field: %s '
+                  'slope-projection long wave + g2s short wave, depiston_n=%g; '
+                  'apertures=default_apertures, reliability_gate=None)'
                   % (longwave_method, depiston_n))
     out.references = 'Laxague et al., E-PSS (in prep); Bjorkqvist et al. (2019)'
     out.history = ('built by compute_all_directional_spectra.py; longwave_method=%s, '
-                   'depiston_n=%g, slope_aperture=%s'
-                   % (longwave_method, depiston_n, str(slope_aperture)))
-    out.description = ('E-PSS multi-aperture elevation directional spectra; sign '
-                       'resolved by the curvature-phase long-wave inversion; '
+                   'depiston_n=%g, slope_aperture=%s, subanchor_tiebreak=%s (>%g deg)'
+                   % (longwave_method, depiston_n, str(slope_aperture),
+                      'on' if use_subanchor_tb else 'off', subanchor_off_deg))
+    out.description = ('E-PSS multi-aperture elevation directional spectra; fold '
+                       'hemisphere resolved per frequency by the direct S_f_theta '
+                       '3-D-FFT sign anchor (long-wave piston phase from the '
+                       'curvature-phase inversion); below the anchor coverage floor '
+                       'an onshore-swell tiebreaker flips bands reading clearly '
+                       'offshore (no southward long-wave fetch at ASIT); '
                        'Direction in radians CW from true North. Polar k/nu directional '
                        'spectra are the Bjorkqvist et al. (2019) jacobian-removed form: '
                        'S_f = int F_f_d dtheta, F_k = int k F_k_d dtheta, '
