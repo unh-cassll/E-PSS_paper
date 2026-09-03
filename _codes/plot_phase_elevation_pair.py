@@ -130,7 +130,7 @@ for col, (run, (ta, tb)) in enumerate(CASES):
             va='center', bbox=dict(boxstyle='round,pad=0.2', fc='w', ec='none', alpha=0.9))
 
     ax = axs[1, col]
-    ax.plot(tw, d['lid'][i0:i1], '--', color=C_LIDAR, lw=2.0)
+    ax.plot(tw, d['lid'][i0:i1], '-', color=C_LIDAR, lw=2.0)
     ax.plot(tw, d['pre'][i0:i1], '-', color=C_PRE, lw=1.6)
     ax.plot(tw, d['post'][i0:i1], '-', color=C_POST, lw=1.8)
     ax.set_xlabel('t [s]'); ax.set_xlim(0, tb - ta)
@@ -149,7 +149,7 @@ for col, (run, (ta, tb)) in enumerate(CASES):
 
 axs[1, 0].set_ylim(-1.35*ymax, 1.35*ymax)          # sharey='row' carries this to (d)
 
-axs[0, 0].legend(handles=[Line2D([], [], color=C_LIDAR, ls='--', lw=2.0, label='lidar'),
+axs[0, 0].legend(handles=[Line2D([], [], color=C_LIDAR, ls='-', lw=2.0, label='lidar'),
                           Line2D([], [], color=C_PRE, lw=1.6, label='E-PSS, before fix'),
                           Line2D([], [], color=C_POST, lw=1.8, label='E-PSS, after fix')],
                  loc='upper right', fontsize=fsize-3, framealpha=0.92)

@@ -1,6 +1,6 @@
 """
 Plot slope distribution statistics (MSS and Gram-Charlier coefficients)
-binned by U10, compared against Cox & Munk [1954] and Breon & Henriot [2006].
+binned by U10, compared against Cox & Munk (1954) and Breon & Henriot (2006).
 @author: nathanlaxague
 """
 
@@ -107,7 +107,7 @@ for i in np.arange(2):
     bin_upper = mss_BH[:,i] + 5e-4
     bin_lower = mss_BH[:,i] - 5e-4
     axs[1-i].fill_between(U10_m_s_vec, bin_upper, bin_lower, color='black', alpha=0.15)
-    axs[1-i].plot(U10_m_s_vec,mss_BH[:,i],'-',linewidth=1,color='black',label='B & H [2006]',markersize=10)
+    axs[1-i].plot(U10_m_s_vec,mss_BH[:,i],'-',linewidth=1,color='black',label='B & H (2006)',markersize=10)
 
     for j in np.arange(len(dolp_gain_choices)):
         
@@ -192,8 +192,8 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
     bin_lower = BH_slope_stats[varkey] - unc
 
     axs[row_index,col_index].fill_between(BH_slope_stats['U10'], bin_upper, bin_lower, color='black', alpha=0.15)
-    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[varkey],label='B & H [2006]',color='black',linewidth=2)
-    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[varkey],':',label='C & M [1954]',color='black',linewidth=2)
+    axs[row_index,col_index].plot(BH_slope_stats['U10'],BH_slope_stats[varkey],label='B & H (2006)',color='black',linewidth=2)
+    axs[row_index,col_index].plot(CM_slope_stats['U10'],CM_slope_stats[varkey],':',label='C & M (1954)',color='black',linewidth=2)
     axs[row_index,col_index].set_ylabel(varname)
     axs[row_index,col_index].set_xlim(*U10_xlim)
 
@@ -231,12 +231,12 @@ for i, varname in zip(np.arange(len(slope_stats_output_names_truncated)),slope_s
             axs[row_index,col_index].text(0.95, 0.93 - 0.12*k, name, color=color_list[k],
                 transform=axs[row_index,col_index].transAxes, fontsize=fsize,
                 ha='right', va='top', fontweight='bold', zorder=7)
-        axs[row_index,col_index].annotate('B & H [2006]',
+        axs[row_index,col_index].annotate('B & H (2006)',
             xy=(5, BH_slope_stats['c22'].values[0]), xytext=(6, -0.05),
             ha='center', va='center', color='black', fontsize=fsize, zorder=7,
             arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))
     if varkey == 'c40':   # panel (c): C & M reference
-        axs[row_index,col_index].annotate('C & M [1954]',
+        axs[row_index,col_index].annotate('C & M (1954)',
             xy=(13, CM_slope_stats['c40'].values[0]), xytext=(11.8, 0.7),
             ha='center', va='center', color='black', fontsize=fsize, zorder=7,
             arrowprops=dict(arrowstyle='-', color='black', linewidth=0.6, shrinkA=2, shrinkB=2))

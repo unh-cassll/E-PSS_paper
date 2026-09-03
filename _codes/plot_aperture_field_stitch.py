@@ -120,12 +120,12 @@ for a in range(len(ap_names)):
     gauges.append((ii, jj))
 
 # single column: 2x2 aperture quad on top, k^3 F(k) spectrum beneath it
-fig = plt.figure(figsize=(fullwidth/2, fullwidth*1.1), constrained_layout=True)
-gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1.45])
+fig = plt.figure(figsize=(fullwidth/2, fullwidth*0.93), constrained_layout=True)
+gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1.9])   # square maps set the top two row heights
 
 def panel_tag(ax, tag):
-    ax.text(0.08, 0.92, tag, transform=ax.transAxes, fontsize=fsize, va='center', ha='center',
-            bbox=dict(boxstyle='round,pad=0.2', fc='white', ec='none', alpha=1.0))
+    ax.text(0.03, 0.97, tag, transform=ax.transAxes, fontsize=fsize, va='top', ha='left',
+            bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=1.0))
 
 # 2x2 aperture quad (broad -> tight, reading order); y-label on left column,
 # x-label on bottom row
@@ -145,9 +145,9 @@ for (r, c), idx, col, tag in zip(quad_cells, show_idx, show_cols, tags):
     inside = np.hypot(gx, gy) <= w/2.0
     ax.scatter(gx[inside], gy[inside], s=14, facecolor='white', edgecolor='black', linewidth=0.5, zorder=5)
     # aperture name inset by its ring, in the ring color
-    ax.text(w/2*0.70, w/2*0.70, ap_names[idx], color=col, fontsize=fsize, fontweight='bold',
+    ax.text(w/2*0.62, w/2*0.62, ap_names[idx], color=col, fontsize=fsize-1, fontweight='bold',
             ha='left', va='bottom', zorder=6,
-            bbox=dict(boxstyle='round,pad=0.12', fc='white', ec='none', alpha=0.65))
+            bbox=dict(boxstyle='round,pad=0.08', fc='white', ec='none', alpha=0.65))
     ax.set_ylabel('y [m]') if c == 0 else ax.set_yticklabels([])
     ax.set_xlabel('x [m]') if r == 1 else ax.set_xticklabels([])
     panel_tag(ax, tag)
@@ -170,7 +170,7 @@ ax.set_xlim(5e-2, 5e1)
 ax.set_ylim(1e-4, 1e-1)
 ax.set_xlabel(r'k [rad m$^{-1}$]'); ax.set_ylabel(r'k$^3$F(k) [rad]')
 ax.grid(which='major', ls='-', lw=0.75); ax.grid(which='minor', ls=':', lw=0.75)
-ax.legend(fontsize=fsize-2, loc='lower right', ncol=2)
+ax.legend(fontsize=fsize-2, loc='upper right', ncol=2)
 panel_tag(ax, '(e)')
 
 

@@ -253,7 +253,7 @@ U10_xlim = (U10_bin_centers[0] - dU/2, U10_bin_centers[-1] + dU/2)
 # ticks at every bin edge, out to and including xmax (so the last tick is labeled)
 U10_xticks = np.arange(U10_xlim[0], U10_xlim[1] + dU/2, dU)
 
-fig = plt.figure(figsize=(fullwidth/2,fullwidth/2))
+fig = plt.figure(figsize=(fullwidth/2,fullwidth*0.432))   # height includes the legend strip above the axes
 # one curve per estimator, each differenced against the ADCP; MAD bands are
 # faint because five overlap
 plotting_order = [1, 6, 5, 4, 3, 2]   # all above the grid zorder so curves sit over the grid
@@ -271,7 +271,9 @@ plt.yticks(np.arange(-360,360,15))
 plt.ylim(-45,45)
 plt.xlabel(r'$U_{10}$ [m s$^{-1}$]')
 plt.ylabel(r'$\Delta\theta_0$ [$\circ$]')
-plt.legend(ncol=2,fontsize=fsize-2,loc='upper right')
+# legend above the axes, clear of the spread bands
+plt.legend(ncol=3,fontsize=fsize-2,loc='lower center',bbox_to_anchor=(0.5,1.005),
+           frameon=False,columnspacing=1.0,handlelength=1.6)
 
 plt.savefig(figpath + 'delta_theta_nought.pdf',bbox_inches='tight')
 

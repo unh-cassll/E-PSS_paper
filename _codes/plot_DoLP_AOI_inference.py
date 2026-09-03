@@ -184,7 +184,7 @@ for col, (title, w_aoi, w_dolp, th_scan, dolp_scan, n_refrac, Ssky, Sup, sky_dol
         ax2.set_ylabel(r'inferred $\theta_i$ [$\circ$]')
     ax2.legend(loc='upper left', fontsize=fsize)
 
-axs[0,0].legend(loc='lower right', bbox_to_anchor=(0.83, 0.0))
+axs[0,0].legend(loc='upper left')
 
 for i, ax in enumerate(axs.ravel()):
     ax.text(0.93,0.95,panel_labels[i],fontsize=fsize,ha='left',va='center',transform=ax.transAxes,

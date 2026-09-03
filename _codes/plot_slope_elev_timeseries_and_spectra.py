@@ -56,7 +56,7 @@ f_hp, f_lp = 0.08, 0.5
 fmin_disp, fmax_disp = 0.05, 1.0
 alpha_faded = 0.30
 
-fig = plt.figure(figsize=(fullwidth/2,fullwidth/2*4/2))
+fig = plt.figure(figsize=(fullwidth/2,fullwidth*0.920))   # height includes the legend strip above the axes
 
 def plot_passband(fx, S, color, label, full_alpha):
     disp = (fx >= fmin_disp) & (fx <= fmax_disp)
@@ -85,6 +85,8 @@ plt.yscale('log')
 plt.xlabel('f [Hz]')
 plt.ylabel(r'$F_{\eta\eta}(f)$ [m$^2$Hz$^{-1}$]')
 
-plt.legend(loc='lower left')
+# legend above the axes, clear of the faded spectral tails
+plt.legend(loc='lower center', bbox_to_anchor=(0.5, 1.005), ncol=2,
+           frameon=False, fontsize=fsize-1, columnspacing=1.0, handlelength=1.6)
 
 plt.savefig(figpath + 'elevation_omnispect.pdf',bbox_inches='tight')
